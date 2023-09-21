@@ -16,9 +16,6 @@ const (
 	TILE_MAP_START_ONE  = 0x9C00
 	TILE_DATA_START     = 0x8000
 
-	LCD_CONTROL_ADDR = 0xFF40
-	LCD_STATUS_ADDR  = 0xFF41
-
 	BUFFER_SIZE          = 23040
 	MAX_OAMS             = 40
 	MAX_SPRITES_PER_LINE = 10
@@ -66,17 +63,17 @@ func NewPPU(bus *bus.Bus) *Ppu {
 }
 
 func (ppu *Ppu) Cycle() ([]uint32, error) {
-	ppu.refreshRegisters()
+	ppu.readRegisters()
 
-	if ppu.ly == ppu.lyc && ppu.lcdStatus.lycLYEqual == 1 {
-		ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.LCDSTAT)
-	}
+	//if ppu.ly == ppu.lyc && ppu.lcdStatus.lycLYEqual == 1 {
+	//	ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.LCDSTAT)
+	//}
 
 	switch ppu.lcdStatus.mode {
 	case OAM_SEARCH:
-		if ppu.dot == 0 && ppu.lcdStatus.oamStatInterrupt == 1 {
-			ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.LCDSTAT)
-		}
+		//if ppu.dot == 0 && ppu.lcdStatus.oamStatInterrupt == 1 {
+		//	ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.LCDSTAT)
+		//}
 
 		// TODO: Search OAM for OBJs whose Y coordinate overlap this line
 		// for all OAMs, check for y-coord
@@ -127,22 +124,24 @@ func (ppu *Ppu) Cycle() ([]uint32, error) {
 
 			ppu.ly++
 			if ppu.ly == V_BLANK_START {
+				ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.VBLANK)
 				ppu.lcdStatus.mode = V_BLANK
 			} else {
 				ppu.lcdStatus.mode = OAM_SEARCH
 				ppu.bus.SetOamAccessible(false)
 				ppu.loadOams()
 			}
+			ppu.writeRegisters()
 			return nil, nil
 		}
 		break
 	case V_BLANK:
 		if ppu.ly == V_BLANK_END && ppu.dot == 0 {
-			ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.VBLANK)
+			//ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.VBLANK)
 
-			if ppu.lcdStatus.vBlankStatInterrupt == 1 {
-				ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.LCDSTAT)
-			}
+			//if ppu.lcdStatus.vBlankStatInterrupt == 1 {
+			//	ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.LCDSTAT)
+			//}
 		}
 		if ppu.dot == SCANLINE_END {
 			ppu.dot = 0
@@ -155,19 +154,23 @@ func (ppu *Ppu) Cycle() ([]uint32, error) {
 				ppu.bus.SetOamAccessible(false)
 				ppu.loadOams()
 				ppu.pixelIdx = 0
+				ppu.writeRegisters()
 				return ppu.pixelBuffer, nil
 			}
+			ppu.writeRegisters()
 			return nil, nil
 		}
 		break
 	}
 
 	ppu.dot++
+	ppu.writeRegisters()
+
 	return nil, nil
 }
 
-func (ppu *Ppu) refreshRegisters() {
-	lcdControlVal := ppu.bus.Read(LCD_CONTROL_ADDR)
+func (ppu *Ppu) readRegisters() {
+	lcdControlVal := ppu.bus.Read(bus.LCD_CTRL_ADDRESS)
 	ppu.lcdControl.enabled = lcdControlVal >> 7 & 1
 	ppu.lcdControl.wTileMapArea = lcdControlVal >> 6 & 1
 	ppu.lcdControl.windowEnabled = lcdControlVal >> 5 & 1
@@ -177,18 +180,32 @@ func (ppu *Ppu) refreshRegisters() {
 	ppu.lcdControl.objEnabled = lcdControlVal >> 1 & 1
 	ppu.lcdControl.bgWindowEnabled = lcdControlVal & 1
 
-	lcdStatusVal := ppu.bus.Read(LCD_STATUS_ADDR)
+	lcdStatusVal := ppu.bus.Read(bus.LCD_STAT_ADDRESS)
 	ppu.lcdStatus.lycStatInterrupt = lcdStatusVal >> 6 & 1
 	ppu.lcdStatus.oamStatInterrupt = lcdStatusVal >> 5 & 1
 	ppu.lcdStatus.vBlankStatInterrupt = lcdStatusVal >> 4 & 1
 	ppu.lcdStatus.hBlankStatInterrupt = lcdStatusVal >> 3 & 1
+
+	ppu.lyc = ppu.bus.Read(bus.LCD_LY_ADDRESS)
+
 	if ppu.lyc == ppu.ly {
 		ppu.lcdStatus.lycLYEqual = 1
 	} else {
 		ppu.lcdStatus.lycLYEqual = 0
 	}
+}
 
-	ppu.bus.Write(LCD_STATUS_ADDR, (lcdStatusVal&0b11111000)|ppu.lcdStatus.lycLYEqual<<2|ppu.lcdStatus.mode)
+func (ppu *Ppu) writeRegisters() {
+	var lcdStat byte = 0
+	lcdStat |= ppu.lcdStatus.lycStatInterrupt << 6
+	lcdStat |= ppu.lcdStatus.oamStatInterrupt << 5
+	lcdStat |= ppu.lcdStatus.vBlankStatInterrupt << 4
+	lcdStat |= ppu.lcdStatus.hBlankStatInterrupt << 3
+	lcdStat |= ppu.lcdStatus.lycLYEqual << 2
+	lcdStat |= ppu.lcdStatus.mode
+	ppu.bus.Write(bus.LCD_STAT_ADDRESS, lcdStat)
+
+	ppu.bus.Write(bus.LCD_Y_ADDRESS, ppu.ly)
 }
 
 func (ppu *Ppu) loadOams() {

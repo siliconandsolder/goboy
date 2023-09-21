@@ -172,7 +172,7 @@ func GetOpCode(code byte) (OpCode, error) {
 		return OpCode{
 			execution: func(c *Cpu) {
 				// signal STOP to timer
-				c.PC += 2
+				c.PC += 1
 				c.waitCycles += 4
 			},
 			toString: "STOP 0",
@@ -643,6 +643,7 @@ func GetOpCode(code byte) (OpCode, error) {
 		return OpCode{
 			execution: func(c *Cpu) {
 				loadRegister(c, c.BC.upper, c.BC.upper)
+				//fmt.Println("Executed LD B,B")
 			},
 			toString: "LD B,B",
 		}, nil
@@ -1283,7 +1284,7 @@ func GetOpCode(code byte) (OpCode, error) {
 			},
 			toString: "SUB L",
 		}, nil
-	case 0x96: // SUB (HL)
+	case 0x96: // SUB A,(HL)
 		return OpCode{
 			execution: func(c *Cpu) {
 				orgVal := c.AF.upper.value
@@ -1298,7 +1299,7 @@ func GetOpCode(code byte) (OpCode, error) {
 				c.PC += 1
 				c.waitCycles += 8
 			},
-			toString: "SUB (HL)",
+			toString: "SUB A,(HL)",
 		}, nil
 	case 0x97: // SUB A
 		return OpCode{
@@ -1702,7 +1703,13 @@ func GetOpCode(code byte) (OpCode, error) {
 	case 0xC9: // RET
 		return OpCode{
 			execution: func(c *Cpu) {
-				ret(c, true)
+				low := uint16(c.readFromBus(c.SP))
+				c.SP++
+				high := uint16(c.readFromBus(c.SP))
+				c.SP++
+
+				c.PC = high<<8 | low
+				c.waitCycles += 16
 			},
 			toString: "RET",
 		}, nil
@@ -1712,14 +1719,6 @@ func GetOpCode(code byte) (OpCode, error) {
 				jump(c, c.getZFlag())
 			},
 			toString: "JP Z,u16",
-		}, nil
-	case 0xCB: // PREFIX CB
-		return OpCode{
-			execution: func(c *Cpu) {
-				c.PC += 1
-				c.waitCycles += 4
-			},
-			toString: "PREFIX CB",
 		}, nil
 	case 0xCC: // CALL Z,u16
 		return OpCode{
@@ -1812,7 +1811,13 @@ func GetOpCode(code byte) (OpCode, error) {
 	case 0xD9: // RETI
 		return OpCode{
 			execution: func(c *Cpu) {
-				ret(c, true)
+				low := uint16(c.readFromBus(c.SP))
+				c.SP++
+				high := uint16(c.readFromBus(c.SP))
+				c.SP++
+
+				c.PC = high<<8 | low
+				c.waitCycles += 16
 				c.interruptEnabled = true
 			},
 			toString: "RETI",

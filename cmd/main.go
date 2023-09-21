@@ -45,7 +45,7 @@ var cmd = &cobra.Command{
 		//	H: winHeight,
 		//}
 
-		cart := cartridge.NewCartridge("./roms/01-special.gb")
+		cart := cartridge.NewCartridge("./roms/instr_timing.gb")
 		m := interrupts.NewManager()
 		b := bus.NewBus(cart, m)
 		c := cpu.NewCpu(b, m)

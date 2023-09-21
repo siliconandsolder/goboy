@@ -22,6 +22,11 @@ const (
 	HIGH_RAM_START = 0xFF80
 	HIGH_RAM_END   = 0xFFFE
 
+	// TODO: implement PPU registers
+	LCD_CTRL_ADDRESS  = 0xFF40
+	LCD_STAT_ADDRESS  = 0xFF41
+	LCD_Y_ADDRESS     = 0xFF44
+	LCD_LY_ADDRESS    = 0xFF45
 	DMA_TRANSFER      = 0xFF46
 	INTERRUPT_REQUEST = 0xFF0F
 	INTERRUPT_ENABLE  = 0xFFFF
@@ -37,6 +42,10 @@ type Bus struct {
 	videoRam       []byte
 	highRam        []byte
 	oam            []byte
+	lcdCtrl        byte
+	lcdStat        byte
+	lcdY           byte
+	lcdLy          byte
 	serialByte     byte
 	vramAccessible bool
 	oamAccessible  bool
@@ -79,6 +88,15 @@ func (bus *Bus) Write(addr uint16, value byte) {
 		if value == 0x81 {
 			fmt.Print(fmt.Sprintf("%c", bus.serialByte))
 		}
+	} else if addr == LCD_CTRL_ADDRESS {
+		bus.lcdCtrl = value
+	} else if addr == LCD_STAT_ADDRESS {
+		bus.lcdStat = value
+	} else if addr == LCD_Y_ADDRESS {
+		bus.lcdY = value
+		//fmt.Printf("LCDY: %d\n", value)
+	} else if addr == LCD_LY_ADDRESS {
+		bus.lcdLy = value
 	}
 }
 func (bus *Bus) Read(addr uint16) byte {
@@ -100,6 +118,14 @@ func (bus *Bus) Read(addr uint16) byte {
 		}
 	} else if addr == INTERRUPT_REQUEST {
 		return bus.manager.GetInterruptRequest()
+	} else if addr == LCD_CTRL_ADDRESS {
+		return bus.lcdCtrl
+	} else if addr == LCD_STAT_ADDRESS {
+		return bus.lcdStat
+	} else if addr == LCD_Y_ADDRESS {
+		return bus.lcdY
+	} else if addr == LCD_LY_ADDRESS {
+		return bus.lcdLy
 	} else if addr >= HIGH_RAM_START && addr <= HIGH_RAM_END {
 		return bus.highRam[addr-HIGH_RAM_START]
 	}

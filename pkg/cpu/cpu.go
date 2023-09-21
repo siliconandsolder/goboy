@@ -53,11 +53,24 @@ type Cpu struct {
 func NewCpu(bus *bus.Bus, manager *interrupts.Manager) *Cpu {
 	_ = os.Remove("./dump.txt")
 	f, _ := os.Create("./dump.txt")
+
+	af := NewRegister()
+	bc := NewRegister()
+	de := NewRegister()
+	hl := NewRegister()
+	af.lower.value = 0x01
+	bc.upper.value = 0x00
+	bc.lower.value = 0x13
+	de.upper.value = 0x00
+	de.lower.value = 0xd8
+	hl.upper.value = 0x01
+	hl.lower.value = 0x4d
+
 	return &Cpu{
-		AF:               NewRegister(),
-		BC:               NewRegister(),
-		DE:               NewRegister(),
-		HL:               NewRegister(),
+		AF:               af,
+		BC:               bc,
+		DE:               de,
+		HL:               hl,
 		SP:               0xFFFE,
 		PC:               0x0100,
 		waitCycles:       0,
