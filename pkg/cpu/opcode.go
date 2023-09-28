@@ -1872,7 +1872,7 @@ func GetOpCode(code byte) (OpCode, error) {
 		return OpCode{
 			execution: func(c *Cpu) {
 				c.writeToBus(0xFF00|uint16(c.BC.lower.value), c.AF.upper.value)
-				c.PC += 2
+				c.PC += 1
 				c.waitCycles += 8
 			},
 			toString: "LDH (C),A",
@@ -1971,7 +1971,7 @@ func GetOpCode(code byte) (OpCode, error) {
 		return OpCode{
 			execution: func(c *Cpu) {
 				c.AF.upper.value = c.readFromBus(0xFF00 | uint16(c.BC.lower.value))
-				c.PC += 2
+				c.PC += 1
 				c.waitCycles += 8
 			},
 			toString: "LDH A,(C)",

@@ -109,7 +109,7 @@ func (cpu *Cpu) Cycle() error {
 
 	// halt until an interrupt is requested
 	if cpu.halt {
-		cpu.waitCycles += 4
+		cpu.waitCycles += 3
 		return nil
 	}
 

@@ -1961,7 +1961,7 @@ func bitHL(c *Cpu, bitNum byte) {
 	c.setHFlag(true)
 
 	c.PC += 2
-	c.waitCycles += 16
+	c.waitCycles += 12
 }
 
 func bit(c *Cpu, bitNum byte, halfRegister *HalfRegister) {
