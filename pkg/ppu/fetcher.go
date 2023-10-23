@@ -14,37 +14,61 @@ const (
 type Fetcher struct {
 	fifo        *PixelFIFO
 	bus         *bus.Bus
+	lcdc        *LcdControl
+	scs         *ScrollStatus
 	shouldCycle bool
 	state       FetcherState
 	tileData    []byte
 
-	tileIdx  byte
-	tileId   byte
-	mapAddr  uint16
-	tileLine byte
+	tileIdx    byte
+	tileId     byte
+	mapAddr    uint16
+	tileLine   byte
+	tileOffset int16
+	lineX      byte
+	pixelX     byte
+	tileX      byte
+	lineY      byte
+	pixelY     byte
+	tileY      byte
 }
 
-func newFetcher(bus *bus.Bus) *Fetcher {
+func newFetcher(bus *bus.Bus, lcdc *LcdControl, scs *ScrollStatus) *Fetcher {
 	return &Fetcher{
 		fifo:        newFIFO(),
 		bus:         bus,
+		lcdc:        lcdc,
+		scs:         scs,
 		shouldCycle: false,
 		state:       0,
 		tileData:    make([]byte, 8),
-		tileIdx:     0,
 		tileId:      0,
+		tileOffset:  0,
 		mapAddr:     0,
 		tileLine:    0,
+		lineX:       0,
+		pixelX:      0,
+		tileX:       0,
+		lineY:       0,
+		pixelY:      0,
+		tileY:       0,
 	}
 }
 
-func (f *Fetcher) reset(mapAddr uint16, tileLine byte) {
-	f.tileIdx = 0
-	f.mapAddr = mapAddr
-	f.tileLine = tileLine
+func (f *Fetcher) reset(lineY byte) {
+	f.lineX = 0
+	f.lineY = lineY
+	f.mapAddr = f.calculateTileMapAddr()
 	f.state = ReadTileID
 
 	f.fifo.clear()
+
+	if f.lcdc.windowEnabled == 1 && f.lineY >= f.scs.wy {
+		f.pixelY = lineY - f.scs.wy
+	} else {
+		f.pixelY = f.scs.scy + lineY
+	}
+	f.tileY = (f.pixelY >> 3) & 31
 }
 
 func (f *Fetcher) cycle() {
@@ -57,7 +81,15 @@ func (f *Fetcher) cycle() {
 
 	switch f.state {
 	case ReadTileID:
-		f.tileId = f.bus.Read(f.mapAddr + uint16(f.tileIdx))
+		f.mapAddr = f.calculateTileMapAddr()
+		tileAddr := f.mapAddr + uint16(f.tileY*32) + uint16(f.tileX)
+		f.tileId = f.bus.PpuReadVram(tileAddr)
+		if f.lcdc.tileDataArea == 1 {
+			f.tileOffset = int16(f.tileId)
+		} else {
+			f.tileOffset = int16(int8(f.tileOffset)) + 128
+		}
+		f.tileOffset *= 16
 		f.state = ReadTileData0
 		break
 	case ReadTileData0:
@@ -70,14 +102,12 @@ func (f *Fetcher) cycle() {
 		break
 	case PushToFIFO:
 		if f.fifo.size <= 8 {
-			// TODO: check if tile is flipped horizontally
 			for i := 7; i >= 0; i-- {
 				if err := f.fifo.push(f.tileData[i]); err != nil {
 					panic(err)
 				}
 			}
 
-			f.tileIdx++
 			f.state = ReadTileID
 		}
 		break
@@ -85,19 +115,58 @@ func (f *Fetcher) cycle() {
 }
 
 func (f *Fetcher) readTileLine(isHigh bool) {
-	offset := TILE_DATA_START + uint16(f.tileId)<<4
-	addr := offset + uint16(f.tileLine)<<2
+	// get tile data base
+	addr := f.getTileDataBase() + uint16(f.tileOffset) + uint16(f.pixelY%8)<<1
 
 	if isHigh {
 		addr++
 	}
-	data := f.bus.Read(addr)
+	data := f.bus.PpuReadVram(addr)
 
-	for bitPos := byte(0); bitPos <= 7; bitPos++ {
-		if !isHigh {
-			f.tileData[bitPos] = (data >> bitPos) & 1
-		} else {
+	for bitPos := byte(0); bitPos < 8; bitPos++ {
+		if isHigh {
 			f.tileData[bitPos] |= ((data >> bitPos) & 1) << 1
+		} else {
+			f.tileData[bitPos] = (data >> bitPos) & 1
 		}
+	}
+}
+
+func (f *Fetcher) calculateTileMapAddr() uint16 {
+	realWx := f.scs.wx - 7
+	if f.lcdc.windowEnabled == 1 && f.lineY >= f.scs.wy && f.lineX >= realWx {
+		f.pixelX = f.lineX - realWx
+	} else {
+		f.pixelX = f.scs.scx + f.lineX
+	}
+
+	f.tileX = (f.pixelX >> 3) & 31
+
+	if f.lcdc.windowEnabled == 1 && f.lineY >= f.scs.wy && f.lineX >= realWx {
+		if f.lcdc.wTileMapArea == 1 {
+			return TILE_MAP_START_ONE
+		} else {
+			return TILE_MAP_START_ZERO
+		}
+	} else if f.lcdc.bgTileMapArea == 1 {
+		return TILE_MAP_START_ONE
+	}
+
+	return TILE_MAP_START_ZERO
+}
+
+func (f *Fetcher) resetIfWindow() {
+	// stop pushing to FIFO, we reached the window
+	realWx := f.scs.wx - 7
+	if f.lcdc.windowEnabled == 1 && f.lcdc.wTileMapArea == 1 && f.lineY >= f.scs.wy && f.lineX >= realWx {
+		f.reset(f.lineY)
+	}
+}
+
+func (f *Fetcher) getTileDataBase() uint16 {
+	if f.lcdc.tileDataArea == 1 {
+		return TILE_DATA_START_ZERO
+	} else {
+		return TILE_DATA_START_ONE
 	}
 }

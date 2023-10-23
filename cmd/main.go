@@ -6,6 +6,7 @@ import (
 	"github.com/siliconandsolder/go-boy/pkg/cartridge"
 	"github.com/siliconandsolder/go-boy/pkg/cpu"
 	"github.com/siliconandsolder/go-boy/pkg/interrupts"
+	"github.com/siliconandsolder/go-boy/pkg/ppu"
 	"github.com/spf13/cobra"
 	"github.com/veandco/go-sdl2/sdl"
 )
@@ -45,40 +46,40 @@ var cmd = &cobra.Command{
 		//	H: winHeight,
 		//}
 
-		cart := cartridge.NewCartridge("./roms/instr_timing.gb")
+		cart := cartridge.NewCartridge("./roms/02-interrupts.gb")
 		m := interrupts.NewManager()
 		b := bus.NewBus(cart, m)
 		c := cpu.NewCpu(b, m)
-		//p := ppu.NewPPU(b)
+		p := ppu.NewPPU(b)
 
 		for {
 			if err := c.Cycle(); err != nil {
 				panic(err)
 			}
-			//if buffer, err := p.Cycle(); err != nil {
-			//	panic(err)
-			//} else if buffer != nil {
-			//	pixels, _, err := texture.Lock(nil)
-			//	//fmt.Sprintf("pixels: %v\n", pixels)
-			//	for i := 0; i < len(buffer); i++ {
-			//		red := byte(buffer[i] >> 24)
-			//		green := byte(buffer[i] >> 16 & 0xFF)
-			//		blue := byte(buffer[i] >> 8 & 0xFF)
-			//
-			//		pixels[i*4] = 0xFF // alpha
-			//		pixels[i*4+1] = blue
-			//		pixels[i*4+2] = green
-			//		pixels[i*4+3] = red
-			//	}
-			//	if err != nil {
-			//		panic(err)
-			//	}
-			//	texture.Unlock()
-			//
-			//	renderer.Clear()
-			//	renderer.Copy(texture, nil, nil)
-			//	renderer.Present()
-			//}
+			if buffer, err := p.Cycle(); err != nil {
+				panic(err)
+			} else if buffer != nil {
+				pixels, _, err := texture.Lock(nil)
+				//fmt.Sprintf("pixels: %v\n", pixels)
+				for i := 0; i < len(buffer); i++ {
+					red := byte(buffer[i] >> 24)
+					green := byte(buffer[i] >> 16 & 0xFF)
+					blue := byte(buffer[i] >> 8 & 0xFF)
+
+					pixels[i*4] = 0xFF // alpha
+					pixels[i*4+1] = blue
+					pixels[i*4+2] = green
+					pixels[i*4+3] = red
+				}
+				if err != nil {
+					panic(err)
+				}
+				texture.Unlock()
+
+				renderer.Clear()
+				renderer.Copy(texture, nil, nil)
+				renderer.Present()
+			}
 		}
 	},
 }

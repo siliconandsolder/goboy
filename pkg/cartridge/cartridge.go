@@ -48,8 +48,6 @@ func NewCartridge(file string) *Cartridge {
 
 	rom = data
 
-	// TODO: load rom
-
 	return &Cartridge{
 		header: header,
 		mbc:    mapper,

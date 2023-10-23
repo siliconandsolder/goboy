@@ -12,9 +12,10 @@ const (
 	V_BLANK_END        = 153
 	SCANLINE_END       = 456
 
-	TILE_MAP_START_ZERO = 0x9800
-	TILE_MAP_START_ONE  = 0x9C00
-	TILE_DATA_START     = 0x8000
+	TILE_MAP_START_ZERO  = 0x9800
+	TILE_MAP_START_ONE   = 0x9C00
+	TILE_DATA_START_ZERO = 0x8000
+	TILE_DATA_START_ONE  = 0x8800
 
 	BUFFER_SIZE          = 23040
 	MAX_OAMS             = 40
@@ -24,12 +25,11 @@ const (
 type Ppu struct {
 	lcdControl  *LcdControl
 	lcdStatus   *LcdStatus
+	scs         *ScrollStatus
 	scy         byte
 	scx         byte
 	ly          byte
 	lyc         byte
-	wy          byte
-	wx          byte
 	oams        []*OamObj
 	lineSprites []*OamObj
 	pixelBuffer []uint32
@@ -42,22 +42,27 @@ type Ppu struct {
 }
 
 func NewPPU(bus *bus.Bus) *Ppu {
+	lcdc := NewLcdControl()
+	scs := NewScrollStatus()
+	oamSlice := make([]*OamObj, MAX_OAMS)
+	for i := range oamSlice {
+		oamSlice[i] = NewOamObj()
+	}
 	return &Ppu{
-		lcdControl:  NewLcdControl(),
+		lcdControl:  lcdc,
 		lcdStatus:   NewLcdStatus(),
+		scs:         scs,
 		scy:         0,
 		scx:         0,
 		ly:          0,
 		lyc:         0,
-		wy:          0,
-		wx:          0,
-		oams:        make([]*OamObj, MAX_OAMS),
+		oams:        oamSlice,
 		lineSprites: make([]*OamObj, 0, MAX_SPRITES_PER_LINE),
 		pixelBuffer: make([]uint32, BUFFER_SIZE),
 		pixelIdx:    0,
 		dot:         0,
 		pixels:      0,
-		fetcher:     newFetcher(bus),
+		fetcher:     newFetcher(bus, lcdc, scs),
 		bus:         bus,
 	}
 }
@@ -65,15 +70,21 @@ func NewPPU(bus *bus.Bus) *Ppu {
 func (ppu *Ppu) Cycle() ([]uint32, error) {
 	ppu.readRegisters()
 
-	//if ppu.ly == ppu.lyc && ppu.lcdStatus.lycLYEqual == 1 {
-	//	ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.LCDSTAT)
-	//}
+	if ppu.lcdControl.enabled == 0 {
+		ppu.bus.SetOamAccessible(true)
+		ppu.bus.SetVramAccessible(true)
+		return nil, nil
+	}
+
+	if ppu.lcdStatus.lycLYEqual == 1 && ppu.dot == 0 && ppu.lcdStatus.lycStatInterrupt == 1 {
+		ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.LCDSTAT)
+	}
 
 	switch ppu.lcdStatus.mode {
 	case OAM_SEARCH:
-		//if ppu.dot == 0 && ppu.lcdStatus.oamStatInterrupt == 1 {
-		//	ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.LCDSTAT)
-		//}
+		if ppu.dot == 0 && ppu.lcdStatus.oamStatInterrupt == 1 {
+			ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.LCDSTAT)
+		}
 
 		// TODO: Search OAM for OBJs whose Y coordinate overlap this line
 		// for all OAMs, check for y-coord
@@ -90,10 +101,7 @@ func (ppu *Ppu) Cycle() ([]uint32, error) {
 		}
 
 		if ppu.dot == MAX_OAM_SEARCH {
-			ppu.pixels = 0
-			tileLine := ppu.ly & 7
-			tileMapAddr := TILE_MAP_START_ZERO + (uint16(ppu.ly>>3) << 5)
-			ppu.fetcher.reset(tileMapAddr, tileLine)
+			ppu.fetcher.reset(ppu.ly)
 			ppu.lcdStatus.mode = PIXEL_TRANSFER
 			ppu.bus.SetVramAccessible(false)
 		}
@@ -105,10 +113,11 @@ func (ppu *Ppu) Cycle() ([]uint32, error) {
 		if colour, popped := ppu.fetcher.fifo.pop(); popped {
 			ppu.pixelBuffer[ppu.pixelIdx] = getColour(colour)
 			ppu.pixelIdx++
-			ppu.pixels++
+			ppu.fetcher.lineX++
+			ppu.fetcher.resetIfWindow()
 		}
 
-		if ppu.pixels == MAX_PIXEL_TRANSFER {
+		if ppu.fetcher.lineX == MAX_PIXEL_TRANSFER {
 			ppu.lcdStatus.mode = H_BLANK
 			ppu.bus.SetVramAccessible(true)
 			ppu.bus.SetOamAccessible(true)
@@ -125,6 +134,9 @@ func (ppu *Ppu) Cycle() ([]uint32, error) {
 			ppu.ly++
 			if ppu.ly == V_BLANK_START {
 				ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.VBLANK)
+				if ppu.lcdStatus.vBlankStatInterrupt == 1 {
+					ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.LCDSTAT)
+				}
 				ppu.lcdStatus.mode = V_BLANK
 			} else {
 				ppu.lcdStatus.mode = OAM_SEARCH
@@ -136,13 +148,6 @@ func (ppu *Ppu) Cycle() ([]uint32, error) {
 		}
 		break
 	case V_BLANK:
-		if ppu.ly == V_BLANK_END && ppu.dot == 0 {
-			//ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.VBLANK)
-
-			//if ppu.lcdStatus.vBlankStatInterrupt == 1 {
-			//	ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.LCDSTAT)
-			//}
-		}
 		if ppu.dot == SCANLINE_END {
 			ppu.dot = 0
 

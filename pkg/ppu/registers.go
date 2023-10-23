@@ -47,7 +47,23 @@ func NewLcdStatus() *LcdStatus {
 		vBlankStatInterrupt: 0,
 		hBlankStatInterrupt: 0,
 		lycLYEqual:          0,
-		mode:                0,
+		mode:                OAM_SEARCH,
+	}
+}
+
+type ScrollStatus struct {
+	scx byte
+	scy byte
+	wx  byte
+	wy  byte
+}
+
+func NewScrollStatus() *ScrollStatus {
+	return &ScrollStatus{
+		scx: 0,
+		scy: 0,
+		wx:  0,
+		wy:  0,
 	}
 }
 

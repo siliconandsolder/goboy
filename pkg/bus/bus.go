@@ -62,6 +62,8 @@ func NewBus(cart *cartridge.Cartridge, manager *interrupts.Manager) *Bus {
 		highRam:        make([]byte, 127),
 		oam:            make([]byte, 160),
 		serialByte:     0,
+		lcdCtrl:        0x95,
+		lcdStat:        0x85,
 		vramAccessible: true,
 		oamAccessible:  true,
 	}
@@ -131,6 +133,10 @@ func (bus *Bus) Read(addr uint16) byte {
 	}
 
 	return 0
+}
+
+func (bus *Bus) PpuReadVram(addr uint16) byte {
+	return bus.videoRam[addr-VRAM_START]
 }
 
 func (bus *Bus) SetVramAccessible(access bool) {

@@ -1,10 +1,8 @@
 package cpu
 
 import (
-	"fmt"
 	"github.com/siliconandsolder/go-boy/pkg/bus"
 	"github.com/siliconandsolder/go-boy/pkg/interrupts"
-	"os"
 )
 
 const (
@@ -45,15 +43,9 @@ type Cpu struct {
 	bus     *bus.Bus
 	manager *interrupts.Manager
 	timer   *SysTimer
-
-	// debug
-	file *os.File
 }
 
 func NewCpu(bus *bus.Bus, manager *interrupts.Manager) *Cpu {
-	_ = os.Remove("./dump.txt")
-	f, _ := os.Create("./dump.txt")
-
 	af := NewRegister()
 	bc := NewRegister()
 	de := NewRegister()
@@ -80,7 +72,6 @@ func NewCpu(bus *bus.Bus, manager *interrupts.Manager) *Cpu {
 		bus:              bus,
 		manager:          manager,
 		timer:            newSysTimer(bus),
-		file:             f,
 	}
 }
 
@@ -131,7 +122,7 @@ func (cpu *Cpu) Cycle() error {
 
 	opCode.execution(cpu)
 
-	_, err = cpu.file.WriteString(fmt.Sprintf("Opcode: %s  - PC: %d, AF: %d, BC: %d, DE: %d, HL: %d, SP: %d\n", opCode.toString, cpu.PC, cpu.AF.getAll(), cpu.BC.getAll(), cpu.DE.getAll(), cpu.HL.getAll(), cpu.SP))
+	//_, err = cpu.file.WriteString(fmt.Sprintf("Opcode: %s  - PC: %d, AF: %d, BC: %d, DE: %d, HL: %d, SP: %d\n", opCode.toString, cpu.PC, cpu.AF.getAll(), cpu.BC.getAll(), cpu.DE.getAll(), cpu.HL.getAll(), cpu.SP))
 	if err != nil {
 		return err
 	}
