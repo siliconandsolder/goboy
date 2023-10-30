@@ -58,10 +58,7 @@ func newFetcher(bus *bus.Bus, lcdc *LcdControl, scs *ScrollStatus) *Fetcher {
 func (f *Fetcher) reset(lineY byte) {
 	f.lineX = 0
 	f.lineY = lineY
-	f.mapAddr = f.calculateTileMapAddr()
 	f.state = ReadTileID
-
-	f.fifo.clear()
 
 	if f.lcdc.windowEnabled == 1 && f.lineY >= f.scs.wy {
 		f.pixelY = lineY - f.scs.wy
@@ -69,6 +66,9 @@ func (f *Fetcher) reset(lineY byte) {
 		f.pixelY = f.scs.scy + lineY
 	}
 	f.tileY = (f.pixelY >> 3) & 31
+
+	f.calculateTileMapAddr()
+	f.fifo.clear()
 }
 
 func (f *Fetcher) cycle() {
@@ -81,13 +81,14 @@ func (f *Fetcher) cycle() {
 
 	switch f.state {
 	case ReadTileID:
-		f.mapAddr = f.calculateTileMapAddr()
-		tileAddr := f.mapAddr + uint16(f.tileY*32) + uint16(f.tileX)
-		f.tileId = f.bus.PpuReadVram(tileAddr)
+		// TODO: something to do with the tileline. Calculating X every cycle might be causing repeat tile
+		//f.calculateTileMapAddr()
+		f.mapAddr = f.getTileMapBase() + uint16(f.tileY)*32 + uint16(f.tileX)
+		f.tileId = f.bus.PpuReadVram(f.mapAddr)
 		if f.lcdc.tileDataArea == 1 {
 			f.tileOffset = int16(f.tileId)
 		} else {
-			f.tileOffset = int16(int8(f.tileOffset)) + 128
+			f.tileOffset = int16(int8(f.tileId)) + 128
 		}
 		f.tileOffset *= 16
 		f.state = ReadTileData0
@@ -107,7 +108,7 @@ func (f *Fetcher) cycle() {
 					panic(err)
 				}
 			}
-
+			f.tileX++
 			f.state = ReadTileID
 		}
 		break
@@ -132,7 +133,7 @@ func (f *Fetcher) readTileLine(isHigh bool) {
 	}
 }
 
-func (f *Fetcher) calculateTileMapAddr() uint16 {
+func (f *Fetcher) calculateTileMapAddr() {
 	realWx := f.scs.wx - 7
 	if f.lcdc.windowEnabled == 1 && f.lineY >= f.scs.wy && f.lineX >= realWx {
 		f.pixelX = f.lineX - realWx
@@ -142,17 +143,21 @@ func (f *Fetcher) calculateTileMapAddr() uint16 {
 
 	f.tileX = (f.pixelX >> 3) & 31
 
+	var tileMapBase uint16 = 0
+
 	if f.lcdc.windowEnabled == 1 && f.lineY >= f.scs.wy && f.lineX >= realWx {
 		if f.lcdc.wTileMapArea == 1 {
-			return TILE_MAP_START_ONE
+			tileMapBase = TILE_MAP_START_ONE
 		} else {
-			return TILE_MAP_START_ZERO
+			tileMapBase = TILE_MAP_START_ZERO
 		}
 	} else if f.lcdc.bgTileMapArea == 1 {
-		return TILE_MAP_START_ONE
+		tileMapBase = TILE_MAP_START_ONE
 	}
 
-	return TILE_MAP_START_ZERO
+	tileMapBase = TILE_MAP_START_ZERO
+
+	f.mapAddr = tileMapBase + uint16(f.tileY)*32 + uint16(f.tileX)
 }
 
 func (f *Fetcher) resetIfWindow() {
@@ -169,4 +174,19 @@ func (f *Fetcher) getTileDataBase() uint16 {
 	} else {
 		return TILE_DATA_START_ONE
 	}
+}
+
+func (f *Fetcher) getTileMapBase() uint16 {
+	realWx := f.scs.wx - 7
+	if f.lcdc.windowEnabled == 1 && f.lineY >= f.scs.wy && f.lineX >= realWx {
+		if f.lcdc.wTileMapArea == 1 {
+			return TILE_MAP_START_ONE
+		} else {
+			return TILE_MAP_START_ZERO
+		}
+	} else if f.lcdc.bgTileMapArea == 1 {
+		return TILE_MAP_START_ONE
+	}
+
+	return TILE_MAP_START_ZERO
 }

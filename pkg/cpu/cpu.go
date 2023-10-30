@@ -96,7 +96,9 @@ func (cpu *Cpu) Cycle() error {
 		return nil
 	}
 
-	cpu.handleInterrupts()
+	if cpu.handleInterrupts() {
+		return nil
+	}
 
 	// halt until an interrupt is requested
 	if cpu.halt {
@@ -109,9 +111,7 @@ func (cpu *Cpu) Cycle() error {
 
 	opVal := cpu.pcRead()
 	if opVal == 0xCB {
-		cpu.PC++
-		opCode, err = GetOpCodeCB(cpu.pcRead())
-		cpu.PC--
+		opCode, err = GetOpCodeCB(cpu.pcReadNext())
 	} else {
 		opCode, err = GetOpCode(opVal)
 	}
@@ -244,15 +244,15 @@ func (cpu *Cpu) doDmaTransfer() {
 	cpu.dmaTransfer = false
 }
 
-func (cpu *Cpu) handleInterrupts() {
+func (cpu *Cpu) handleInterrupts() bool {
 
 	intVal := cpu.manager.GetPendingInterrupts()
 	if intVal != 0 {
 		cpu.halt = false
 	}
 
-	if !cpu.interruptEnabled {
-		return
+	if !cpu.interruptEnabled || intVal == 0 {
+		return false
 	}
 
 	var pcVal uint16
@@ -272,8 +272,6 @@ func (cpu *Cpu) handleInterrupts() {
 	case interrupts.JOYPAD:
 		pcVal = 0x60
 		break
-	default:
-		return
 	}
 
 	cpu.manager.DisableInterruptRequest(intVal)
@@ -283,4 +281,7 @@ func (cpu *Cpu) handleInterrupts() {
 	cpu.bus.Write(cpu.SP+1, byte(cpu.PC>>8)) // upper half
 	cpu.PC = pcVal
 	cpu.interruptEnabled = false
+
+	cpu.waitCycles += 20
+	return true
 }

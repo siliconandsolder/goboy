@@ -5,8 +5,6 @@ import (
 	"github.com/siliconandsolder/go-boy/pkg/interrupts"
 )
 
-const DIV_PERIOD uint16 = 256
-
 type SysTimer struct {
 	bus         *bus.Bus
 	systemTimer uint16
@@ -23,11 +21,11 @@ type SysTimer struct {
 func newSysTimer(bus *bus.Bus) *SysTimer {
 	return &SysTimer{
 		bus:         bus,
-		systemTimer: 0x18,
+		systemTimer: 0,
 		tima:        0,
 		timaTimer:   0,
 		tma:         0,
-		tac:         0xF8,
+		tac:         0,
 		lastBit:     0,
 		cyclesToIrq: 0,
 		stop:        false,
@@ -45,11 +43,11 @@ func (timer *SysTimer) cycle() error {
 
 	if timer.tac&4 == 4 { // TIMA enabled
 		timer.timaTimer++
-		if timer.timaTimer >= getTimaInterval(timer.tac&3) {
+		if timer.timaTimer == getTimaInterval(timer.tac&3) {
 			timer.tima++
-			timer.timaTimer -= getTimaInterval(timer.tac & 3)
+			timer.timaTimer = 0
 
-			if timer.tima == 0xFF {
+			if timer.tima == 0 {
 				timer.bus.Write(bus.INTERRUPT_REQUEST, interrupts.TIMER)
 				timer.tima = timer.tma
 				timer.timaReload = true

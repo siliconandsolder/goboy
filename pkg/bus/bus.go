@@ -25,6 +25,8 @@ const (
 	// TODO: implement PPU registers
 	LCD_CTRL_ADDRESS  = 0xFF40
 	LCD_STAT_ADDRESS  = 0xFF41
+	SCY_ADDRESS       = 0xFF42
+	SCX_ADDRESS       = 0xFF43
 	LCD_Y_ADDRESS     = 0xFF44
 	LCD_LY_ADDRESS    = 0xFF45
 	DMA_TRANSFER      = 0xFF46
@@ -46,6 +48,8 @@ type Bus struct {
 	lcdStat        byte
 	lcdY           byte
 	lcdLy          byte
+	scy            byte
+	scx            byte
 	serialByte     byte
 	vramAccessible bool
 	oamAccessible  bool
@@ -64,6 +68,8 @@ func NewBus(cart *cartridge.Cartridge, manager *interrupts.Manager) *Bus {
 		serialByte:     0,
 		lcdCtrl:        0x95,
 		lcdStat:        0x85,
+		scy:            0,
+		scx:            0,
 		vramAccessible: true,
 		oamAccessible:  true,
 	}
@@ -94,6 +100,10 @@ func (bus *Bus) Write(addr uint16, value byte) {
 		bus.lcdCtrl = value
 	} else if addr == LCD_STAT_ADDRESS {
 		bus.lcdStat = value
+	} else if addr == SCY_ADDRESS {
+		bus.scy = value
+	} else if addr == SCX_ADDRESS {
+		bus.scx = value
 	} else if addr == LCD_Y_ADDRESS {
 		bus.lcdY = value
 		//fmt.Printf("LCDY: %d\n", value)
@@ -124,6 +134,10 @@ func (bus *Bus) Read(addr uint16) byte {
 		return bus.lcdCtrl
 	} else if addr == LCD_STAT_ADDRESS {
 		return bus.lcdStat
+	} else if addr == SCY_ADDRESS {
+		return bus.scy
+	} else if addr == SCX_ADDRESS {
+		return bus.scx
 	} else if addr == LCD_Y_ADDRESS {
 		return bus.lcdY
 	} else if addr == LCD_LY_ADDRESS {

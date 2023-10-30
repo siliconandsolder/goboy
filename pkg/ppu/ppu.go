@@ -26,8 +26,6 @@ type Ppu struct {
 	lcdControl  *LcdControl
 	lcdStatus   *LcdStatus
 	scs         *ScrollStatus
-	scy         byte
-	scx         byte
 	ly          byte
 	lyc         byte
 	oams        []*OamObj
@@ -52,8 +50,6 @@ func NewPPU(bus *bus.Bus) *Ppu {
 		lcdControl:  lcdc,
 		lcdStatus:   NewLcdStatus(),
 		scs:         scs,
-		scy:         0,
-		scx:         0,
 		ly:          0,
 		lyc:         0,
 		oams:        oamSlice,
@@ -190,6 +186,9 @@ func (ppu *Ppu) readRegisters() {
 	ppu.lcdStatus.oamStatInterrupt = lcdStatusVal >> 5 & 1
 	ppu.lcdStatus.vBlankStatInterrupt = lcdStatusVal >> 4 & 1
 	ppu.lcdStatus.hBlankStatInterrupt = lcdStatusVal >> 3 & 1
+
+	ppu.scs.scy = ppu.bus.Read(bus.SCY_ADDRESS)
+	ppu.scs.scx = ppu.bus.Read(bus.SCX_ADDRESS)
 
 	ppu.lyc = ppu.bus.Read(bus.LCD_LY_ADDRESS)
 

@@ -46,11 +46,13 @@ var cmd = &cobra.Command{
 		//	H: winHeight,
 		//}
 
-		cart := cartridge.NewCartridge("./roms/02-interrupts.gb")
+		cart := cartridge.NewCartridge("./roms/cpu_instrs.gb")
 		m := interrupts.NewManager()
 		b := bus.NewBus(cart, m)
 		c := cpu.NewCpu(b, m)
 		p := ppu.NewPPU(b)
+
+		// TODO: return cycles from cpu, pass them to ppu and then timer
 
 		for {
 			if err := c.Cycle(); err != nil {
