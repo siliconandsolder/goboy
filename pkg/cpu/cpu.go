@@ -7,6 +7,8 @@ import (
 
 const (
 	DMA_TRANSFER_TIME    = 160
+	HALT_CYCLES          = 4
+	INTERRUPT_CYCLES     = 20
 	DMA_TRANSFER_ADDRESS = 0xFF46
 
 	DIV_TIMER_ADDRESS = 0xFF04
@@ -45,7 +47,7 @@ type Cpu struct {
 	timer   *SysTimer
 }
 
-func NewCpu(bus *bus.Bus, manager *interrupts.Manager) *Cpu {
+func NewCpu(bus *bus.Bus, manager *interrupts.Manager, timer *SysTimer) *Cpu {
 	af := NewRegister()
 	bc := NewRegister()
 	de := NewRegister()
@@ -71,39 +73,40 @@ func NewCpu(bus *bus.Bus, manager *interrupts.Manager) *Cpu {
 		doubleSpeed:      false,
 		bus:              bus,
 		manager:          manager,
-		timer:            newSysTimer(bus),
+		timer:            timer,
 	}
 }
 
-func (cpu *Cpu) Cycle() error {
+func (cpu *Cpu) Cycle() (byte, error) {
 
-	if err := cpu.timer.cycle(); err != nil {
-		return err
-	}
+	//if err := cpu.timer.Cycle(); err != nil {
+	//	return err
+	//}
+	//
+	//if cpu.waitCycles > 0 {
+	//	cpu.waitCycles -= 1
+	//	return nil
+	//}
 
-	if cpu.waitCycles > 0 {
-		cpu.waitCycles -= 1
-		return nil
-	}
+	cpu.waitCycles = 0
 
 	if cpu.dmaTransfer {
 		cpu.doDmaTransfer()
-		cpu.dmaCountdown = DMA_TRANSFER_TIME
+		return DMA_TRANSFER_TIME, nil
 	}
 
-	if cpu.dmaCountdown > 0 {
-		cpu.dmaCountdown--
-		return nil
-	}
+	//if cpu.dmaCountdown > 0 {
+	//	cpu.dmaCountdown--
+	//	return nil
+	//}
 
 	if cpu.handleInterrupts() {
-		return nil
+		return INTERRUPT_CYCLES, nil
 	}
 
 	// halt until an interrupt is requested
 	if cpu.halt {
-		cpu.waitCycles += 3
-		return nil
+		return HALT_CYCLES, nil
 	}
 
 	var opCode OpCode
@@ -117,18 +120,18 @@ func (cpu *Cpu) Cycle() error {
 	}
 
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	opCode.execution(cpu)
 
 	//_, err = cpu.file.WriteString(fmt.Sprintf("Opcode: %s  - PC: %d, AF: %d, BC: %d, DE: %d, HL: %d, SP: %d\n", opCode.toString, cpu.PC, cpu.AF.getAll(), cpu.BC.getAll(), cpu.DE.getAll(), cpu.HL.getAll(), cpu.SP))
 	if err != nil {
-		return err
+		return 0, err
 	}
 	//fmt.Println(fmt.Sprintf("Opcode: %s  - PC: %d, AF: %d, BC: %d, DE: %d, HL: %d, SP: %d", opCode.toString, cpu.PC, cpu.AF.getAll(), cpu.BC.getAll(), cpu.DE.getAll(), cpu.HL.getAll(), cpu.SP))
-	cpu.waitCycles -= 1 // accounts for current cycle
-	return nil
+	//cpu.waitCycles -= 1 // accounts for current cycle
+	return cpu.waitCycles, nil
 }
 
 func (cpu *Cpu) setZFlag(set bool) {
@@ -282,6 +285,5 @@ func (cpu *Cpu) handleInterrupts() bool {
 	cpu.PC = pcVal
 	cpu.interruptEnabled = false
 
-	cpu.waitCycles += 20
 	return true
 }

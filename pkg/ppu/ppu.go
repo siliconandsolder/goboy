@@ -31,6 +31,7 @@ type Ppu struct {
 	oams        []*OamObj
 	lineSprites []*OamObj
 	pixelBuffer []uint32
+	bufferReady bool
 	pixelIdx    uint16
 
 	dot     uint16
@@ -55,6 +56,7 @@ func NewPPU(bus *bus.Bus) *Ppu {
 		oams:        oamSlice,
 		lineSprites: make([]*OamObj, 0, MAX_SPRITES_PER_LINE),
 		pixelBuffer: make([]uint32, BUFFER_SIZE),
+		bufferReady: false,
 		pixelIdx:    0,
 		dot:         0,
 		pixels:      0,
@@ -63,109 +65,117 @@ func NewPPU(bus *bus.Bus) *Ppu {
 	}
 }
 
-func (ppu *Ppu) Cycle() ([]uint32, error) {
-	ppu.readRegisters()
+func (ppu *Ppu) Cycle(cycles byte) ([]uint32, error) {
+	for i := byte(0); i < cycles; i++ {
+		ppu.readRegisters()
 
-	if ppu.lcdControl.enabled == 0 {
-		ppu.bus.SetOamAccessible(true)
-		ppu.bus.SetVramAccessible(true)
-		return nil, nil
-	}
-
-	if ppu.lcdStatus.lycLYEqual == 1 && ppu.dot == 0 && ppu.lcdStatus.lycStatInterrupt == 1 {
-		ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.LCDSTAT)
-	}
-
-	switch ppu.lcdStatus.mode {
-	case OAM_SEARCH:
-		if ppu.dot == 0 && ppu.lcdStatus.oamStatInterrupt == 1 {
-			ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.LCDSTAT)
-		}
-
-		// TODO: Search OAM for OBJs whose Y coordinate overlap this line
-		// for all OAMs, check for y-coord
-		// if match, record in lineSprites
-		// break after 10 or end of loop
-
-		for _, oam := range ppu.oams {
-			if oam.posY <= (ppu.ly+16) && (ppu.ly+16) < (oam.posY+ppu.lcdControl.objSize) {
-				ppu.lineSprites = append(ppu.lineSprites, oam)
-			}
-			if len(ppu.lineSprites) == MAX_SPRITES_PER_LINE {
-				break
-			}
-		}
-
-		if ppu.dot == MAX_OAM_SEARCH {
-			ppu.fetcher.reset(ppu.ly)
-			ppu.lcdStatus.mode = PIXEL_TRANSFER
-			ppu.bus.SetVramAccessible(false)
-		}
-		break
-	case PIXEL_TRANSFER:
-		// send pixels to display
-		ppu.fetcher.cycle()
-
-		if colour, popped := ppu.fetcher.fifo.pop(); popped {
-			ppu.pixelBuffer[ppu.pixelIdx] = getColour(colour)
-			ppu.pixelIdx++
-			ppu.fetcher.lineX++
-			ppu.fetcher.resetIfWindow()
-		}
-
-		if ppu.fetcher.lineX == MAX_PIXEL_TRANSFER {
-			ppu.lcdStatus.mode = H_BLANK
-			ppu.bus.SetVramAccessible(true)
+		if ppu.lcdControl.enabled == 0 {
 			ppu.bus.SetOamAccessible(true)
+			ppu.bus.SetVramAccessible(true)
+			continue
 		}
-		break
-	case H_BLANK:
-		if ppu.dot == 0 && ppu.lcdStatus.hBlankStatInterrupt == 1 {
+
+		if ppu.lcdStatus.lycLYEqual == 1 && ppu.dot == 0 && ppu.lcdStatus.lycStatInterrupt == 1 {
 			ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.LCDSTAT)
 		}
-		// wait and go to OAM search, or do vblank if ly == 144
-		if ppu.dot == SCANLINE_END {
-			ppu.dot = 0
 
-			ppu.ly++
-			if ppu.ly == V_BLANK_START {
-				ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.VBLANK)
-				if ppu.lcdStatus.vBlankStatInterrupt == 1 {
-					ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.LCDSTAT)
+		switch ppu.lcdStatus.mode {
+		case OAM_SEARCH:
+			if ppu.dot == 0 && ppu.lcdStatus.oamStatInterrupt == 1 {
+				ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.LCDSTAT)
+			}
+
+			// TODO: Search OAM for OBJs whose Y coordinate overlap this line
+			// for all OAMs, check for y-coord
+			// if match, record in lineSprites
+			// break after 10 or end of loop
+
+			//for _, oam := range ppu.oams {
+			//	if oam.posY <= (ppu.ly+16) && (ppu.ly+16) < (oam.posY+ppu.lcdControl.objSize) {
+			//		ppu.lineSprites = append(ppu.lineSprites, oam)
+			//	}
+			//	if len(ppu.lineSprites) == MAX_SPRITES_PER_LINE {
+			//		break
+			//	}
+			//}
+
+			if ppu.dot == MAX_OAM_SEARCH {
+				ppu.fetcher.reset(ppu.ly)
+				ppu.lcdStatus.mode = PIXEL_TRANSFER
+				ppu.bus.SetVramAccessible(false)
+			}
+			break
+		case PIXEL_TRANSFER:
+			// send pixels to display
+			ppu.fetcher.cycle()
+
+			if colour, popped := ppu.fetcher.fifo.pop(); popped {
+				ppu.pixelBuffer[ppu.pixelIdx] = getColour(colour)
+				ppu.pixelIdx++
+				ppu.fetcher.lineX++
+				ppu.fetcher.resetIfWindow()
+			}
+
+			if ppu.fetcher.lineX == MAX_PIXEL_TRANSFER {
+				ppu.lcdStatus.mode = H_BLANK
+				ppu.bus.SetVramAccessible(true)
+				ppu.bus.SetOamAccessible(true)
+			}
+			break
+		case H_BLANK:
+			if ppu.dot == 0 && ppu.lcdStatus.hBlankStatInterrupt == 1 {
+				ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.LCDSTAT)
+			}
+			// wait and go to OAM search, or do vblank if ly == 144
+			if ppu.dot == SCANLINE_END {
+				ppu.dot = 0
+
+				ppu.ly++
+				if ppu.ly == V_BLANK_START {
+					ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.VBLANK)
+					if ppu.lcdStatus.vBlankStatInterrupt == 1 {
+						ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.LCDSTAT)
+					}
+					ppu.lcdStatus.mode = V_BLANK
+				} else {
+					ppu.lcdStatus.mode = OAM_SEARCH
+					ppu.bus.SetOamAccessible(false)
+					ppu.loadOams()
 				}
-				ppu.lcdStatus.mode = V_BLANK
-			} else {
-				ppu.lcdStatus.mode = OAM_SEARCH
-				ppu.bus.SetOamAccessible(false)
-				ppu.loadOams()
-			}
-			ppu.writeRegisters()
-			return nil, nil
-		}
-		break
-	case V_BLANK:
-		if ppu.dot == SCANLINE_END {
-			ppu.dot = 0
-
-			ppu.ly++
-			if ppu.ly == V_BLANK_END {
-				ppu.ly = 0
-				ppu.lcdStatus.mode = OAM_SEARCH
-				ppu.lineSprites = make([]*OamObj, 0, MAX_SPRITES_PER_LINE)
-				ppu.bus.SetOamAccessible(false)
-				ppu.loadOams()
-				ppu.pixelIdx = 0
 				ppu.writeRegisters()
-				return ppu.pixelBuffer, nil
+				continue
 			}
-			ppu.writeRegisters()
-			return nil, nil
+			break
+		case V_BLANK:
+			if ppu.dot == SCANLINE_END {
+				ppu.dot = 0
+
+				ppu.ly++
+				if ppu.ly == V_BLANK_END {
+					ppu.ly = 0
+					ppu.lcdStatus.mode = OAM_SEARCH
+					ppu.lineSprites = make([]*OamObj, 0, MAX_SPRITES_PER_LINE)
+					ppu.bus.SetOamAccessible(false)
+					ppu.loadOams()
+					ppu.pixelIdx = 0
+					ppu.writeRegisters()
+					ppu.bufferReady = true
+					continue
+				}
+				ppu.writeRegisters()
+				continue
+			}
+			break
 		}
-		break
+
+		ppu.dot++
+		ppu.writeRegisters()
 	}
 
-	ppu.dot++
-	ppu.writeRegisters()
+	if ppu.bufferReady {
+		ppu.bufferReady = false
+		return ppu.pixelBuffer, nil
+	}
 
 	return nil, nil
 }

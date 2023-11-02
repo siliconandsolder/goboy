@@ -18,7 +18,7 @@ type SysTimer struct {
 	timaReload  bool
 }
 
-func newSysTimer(bus *bus.Bus) *SysTimer {
+func NewSysTimer(bus *bus.Bus) *SysTimer {
 	return &SysTimer{
 		bus:         bus,
 		systemTimer: 0,
@@ -33,29 +33,29 @@ func newSysTimer(bus *bus.Bus) *SysTimer {
 	}
 }
 
-func (timer *SysTimer) cycle() error {
-	if timer.stop {
-		return nil
-	}
+func (timer *SysTimer) Cycle(cycles byte) {
+	for i := byte(0); i < cycles; i++ {
+		if timer.stop {
+			return
+		}
 
-	timer.systemTimer++
-	timer.timaReload = false
+		timer.systemTimer++
+		timer.timaReload = false
 
-	if timer.tac&4 == 4 { // TIMA enabled
-		timer.timaTimer++
-		if timer.timaTimer == getTimaInterval(timer.tac&3) {
-			timer.tima++
-			timer.timaTimer = 0
+		if timer.tac&4 == 4 { // TIMA enabled
+			timer.timaTimer++
+			if timer.timaTimer == getTimaInterval(timer.tac&3) {
+				timer.tima++
+				timer.timaTimer = 0
 
-			if timer.tima == 0 {
-				timer.bus.Write(bus.INTERRUPT_REQUEST, interrupts.TIMER)
-				timer.tima = timer.tma
-				timer.timaReload = true
+				if timer.tima == 0 {
+					timer.bus.Write(bus.INTERRUPT_REQUEST, interrupts.TIMER)
+					timer.tima = timer.tma
+					timer.timaReload = true
+				}
 			}
 		}
 	}
-
-	return nil
 }
 
 func (timer *SysTimer) write(addr uint16, val byte) {
