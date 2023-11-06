@@ -20,14 +20,14 @@ type LcdControl struct {
 
 func NewLcdControl() *LcdControl {
 	return &LcdControl{
-		enabled:         0,
+		enabled:         1,
 		wTileMapArea:    0,
 		windowEnabled:   0,
-		tileDataArea:    0,
+		tileDataArea:    1,
 		bgTileMapArea:   0,
 		objSize:         0,
 		objEnabled:      0,
-		bgWindowEnabled: 0,
+		bgWindowEnabled: 1,
 	}
 }
 
@@ -47,7 +47,7 @@ func NewLcdStatus() *LcdStatus {
 		vBlankStatInterrupt: 0,
 		hBlankStatInterrupt: 0,
 		lycLYEqual:          0,
-		mode:                OAM_SEARCH,
+		mode:                H_BLANK,
 	}
 }
 

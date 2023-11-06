@@ -10,7 +10,7 @@ const (
 	MAX_PIXEL_TRANSFER = 160
 	V_BLANK_START      = 144
 	V_BLANK_END        = 153
-	SCANLINE_END       = 456
+	SCANLINE_END       = 455
 
 	TILE_MAP_START_ZERO  = 0x9800
 	TILE_MAP_START_ONE   = 0x9C00
@@ -66,18 +66,18 @@ func NewPPU(bus *bus.Bus) *Ppu {
 }
 
 func (ppu *Ppu) Cycle(cycles byte) ([]uint32, error) {
-	for i := byte(0); i < cycles; i++ {
-		ppu.readRegisters()
 
+	ppu.readRegisters()
+	for i := byte(0); i < cycles; i++ {
 		if ppu.lcdControl.enabled == 0 {
 			ppu.bus.SetOamAccessible(true)
 			ppu.bus.SetVramAccessible(true)
-			continue
+			return nil, nil
 		}
 
-		if ppu.lcdStatus.lycLYEqual == 1 && ppu.dot == 0 && ppu.lcdStatus.lycStatInterrupt == 1 {
-			ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.LCDSTAT)
-		}
+		//if ppu.lcdStatus.lycLYEqual == 1 && ppu.dot == 0 && ppu.lcdStatus.lycStatInterrupt == 1 {
+		//	ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.LCDSTAT)
+		//}
 
 		switch ppu.lcdStatus.mode {
 		case OAM_SEARCH:
@@ -120,29 +120,38 @@ func (ppu *Ppu) Cycle(cycles byte) ([]uint32, error) {
 				ppu.lcdStatus.mode = H_BLANK
 				ppu.bus.SetVramAccessible(true)
 				ppu.bus.SetOamAccessible(true)
+				if ppu.lcdStatus.hBlankStatInterrupt == 1 {
+					ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.LCDSTAT)
+				}
 			}
 			break
 		case H_BLANK:
-			if ppu.dot == 0 && ppu.lcdStatus.hBlankStatInterrupt == 1 {
-				ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.LCDSTAT)
-			}
 			// wait and go to OAM search, or do vblank if ly == 144
 			if ppu.dot == SCANLINE_END {
 				ppu.dot = 0
 
 				ppu.ly++
+				if ppu.lyc == ppu.ly {
+					ppu.lcdStatus.lycLYEqual = 1
+					if ppu.lcdStatus.lycStatInterrupt == 1 {
+						ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.LCDSTAT)
+					}
+				} else {
+					ppu.lcdStatus.lycLYEqual = 0
+				}
+
 				if ppu.ly == V_BLANK_START {
+					ppu.lcdStatus.mode = V_BLANK
 					ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.VBLANK)
 					if ppu.lcdStatus.vBlankStatInterrupt == 1 {
 						ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.LCDSTAT)
 					}
-					ppu.lcdStatus.mode = V_BLANK
 				} else {
 					ppu.lcdStatus.mode = OAM_SEARCH
 					ppu.bus.SetOamAccessible(false)
 					ppu.loadOams()
 				}
-				ppu.writeRegisters()
+				//ppu.writeRegisters()
 				continue
 			}
 			break
@@ -151,6 +160,15 @@ func (ppu *Ppu) Cycle(cycles byte) ([]uint32, error) {
 				ppu.dot = 0
 
 				ppu.ly++
+				if ppu.lyc == ppu.ly {
+					ppu.lcdStatus.lycLYEqual = 1
+					if ppu.lcdStatus.lycStatInterrupt == 1 {
+						ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.LCDSTAT)
+					}
+				} else {
+					ppu.lcdStatus.lycLYEqual = 0
+				}
+
 				if ppu.ly == V_BLANK_END {
 					ppu.ly = 0
 					ppu.lcdStatus.mode = OAM_SEARCH
@@ -158,19 +176,20 @@ func (ppu *Ppu) Cycle(cycles byte) ([]uint32, error) {
 					ppu.bus.SetOamAccessible(false)
 					ppu.loadOams()
 					ppu.pixelIdx = 0
-					ppu.writeRegisters()
+					//ppu.writeRegisters()
 					ppu.bufferReady = true
 					continue
 				}
-				ppu.writeRegisters()
+				//ppu.writeRegisters()
 				continue
 			}
 			break
 		}
 
 		ppu.dot++
-		ppu.writeRegisters()
 	}
+
+	ppu.writeRegisters()
 
 	if ppu.bufferReady {
 		ppu.bufferReady = false
@@ -201,12 +220,6 @@ func (ppu *Ppu) readRegisters() {
 	ppu.scs.scx = ppu.bus.Read(bus.SCX_ADDRESS)
 
 	ppu.lyc = ppu.bus.Read(bus.LCD_LY_ADDRESS)
-
-	if ppu.lyc == ppu.ly {
-		ppu.lcdStatus.lycLYEqual = 1
-	} else {
-		ppu.lcdStatus.lycLYEqual = 0
-	}
 }
 
 func (ppu *Ppu) writeRegisters() {
