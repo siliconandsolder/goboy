@@ -8,6 +8,7 @@ import (
 const (
 	MAX_OAM_SEARCH     = 80
 	MAX_PIXEL_TRANSFER = 160
+	H_BLANK_END        = 143
 	V_BLANK_START      = 144
 	V_BLANK_END        = 153
 	SCANLINE_END       = 455
@@ -81,10 +82,6 @@ func (ppu *Ppu) Cycle(cycles byte) ([]uint32, error) {
 
 		switch ppu.lcdStatus.mode {
 		case OAM_SEARCH:
-			if ppu.dot == 0 && ppu.lcdStatus.oamStatInterrupt == 1 {
-				ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.LCDSTAT)
-			}
-
 			// TODO: Search OAM for OBJs whose Y coordinate overlap this line
 			// for all OAMs, check for y-coord
 			// if match, record in lineSprites
@@ -128,65 +125,52 @@ func (ppu *Ppu) Cycle(cycles byte) ([]uint32, error) {
 		case H_BLANK:
 			// wait and go to OAM search, or do vblank if ly == 144
 			if ppu.dot == SCANLINE_END {
-				ppu.dot = 0
-
-				ppu.ly++
-				if ppu.lyc == ppu.ly {
-					ppu.lcdStatus.lycLYEqual = 1
-					if ppu.lcdStatus.lycStatInterrupt == 1 {
-						ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.LCDSTAT)
-					}
-				} else {
-					ppu.lcdStatus.lycLYEqual = 0
-				}
-
-				if ppu.ly == V_BLANK_START {
+				if ppu.ly == H_BLANK_END {
 					ppu.lcdStatus.mode = V_BLANK
-					ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.VBLANK)
-					if ppu.lcdStatus.vBlankStatInterrupt == 1 {
-						ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.LCDSTAT)
-					}
 				} else {
 					ppu.lcdStatus.mode = OAM_SEARCH
 					ppu.bus.SetOamAccessible(false)
 					ppu.loadOams()
 				}
-				//ppu.writeRegisters()
-				continue
 			}
 			break
 		case V_BLANK:
-			if ppu.dot == SCANLINE_END {
-				ppu.dot = 0
-
-				ppu.ly++
-				if ppu.lyc == ppu.ly {
-					ppu.lcdStatus.lycLYEqual = 1
-					if ppu.lcdStatus.lycStatInterrupt == 1 {
-						ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.LCDSTAT)
-					}
-				} else {
-					ppu.lcdStatus.lycLYEqual = 0
-				}
-
-				if ppu.ly == V_BLANK_END {
-					ppu.ly = 0
-					ppu.lcdStatus.mode = OAM_SEARCH
-					ppu.lineSprites = make([]*OamObj, 0, MAX_SPRITES_PER_LINE)
-					ppu.bus.SetOamAccessible(false)
-					ppu.loadOams()
-					ppu.pixelIdx = 0
-					//ppu.writeRegisters()
-					ppu.bufferReady = true
-					continue
-				}
-				//ppu.writeRegisters()
-				continue
+			if ppu.dot == SCANLINE_END && ppu.ly == V_BLANK_END {
+				ppu.lcdStatus.mode = OAM_SEARCH
+				ppu.lineSprites = make([]*OamObj, 0, MAX_SPRITES_PER_LINE)
+				ppu.bus.SetOamAccessible(false)
+				ppu.loadOams()
+				ppu.pixelIdx = 0
+				ppu.bufferReady = true
 			}
 			break
 		}
 
 		ppu.dot++
+		if ppu.dot == SCANLINE_END+1 {
+			ppu.dot = 0
+			ppu.ly++
+			if ppu.ly == V_BLANK_END+1 {
+				ppu.ly = 0
+			}
+
+			ppu.lcdStatus.lycLYEqual = 0
+			if ppu.lyc == ppu.ly {
+				ppu.lcdStatus.lycLYEqual = 1
+				if ppu.lcdStatus.lycStatInterrupt == 1 {
+					ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.LCDSTAT)
+				}
+			}
+
+			if ppu.ly == V_BLANK_START {
+				ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.VBLANK)
+				if ppu.lcdStatus.vBlankStatInterrupt == 1 {
+					ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.LCDSTAT)
+				}
+			} else if ppu.ly < V_BLANK_START && ppu.lcdStatus.oamStatInterrupt == 1 {
+				ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.LCDSTAT)
+			}
+		}
 	}
 
 	ppu.writeRegisters()
@@ -220,6 +204,11 @@ func (ppu *Ppu) readRegisters() {
 	ppu.scs.scx = ppu.bus.Read(bus.SCX_ADDRESS)
 
 	ppu.lyc = ppu.bus.Read(bus.LCD_LY_ADDRESS)
+
+	ppu.lcdStatus.lycLYEqual = 0
+	if ppu.ly == ppu.lyc {
+		ppu.lcdStatus.lycLYEqual = 1
+	}
 }
 
 func (ppu *Ppu) writeRegisters() {

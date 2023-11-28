@@ -60,6 +60,7 @@ var cmd = &cobra.Command{
 			if err != nil {
 				panic(err)
 			}
+			t.Cycle(cycles)
 			if buffer, err := p.Cycle(cycles); err != nil {
 				panic(err)
 			} else if buffer != nil {
@@ -84,8 +85,6 @@ var cmd = &cobra.Command{
 				renderer.Copy(texture, nil, nil)
 				renderer.Present()
 			}
-
-			t.Cycle(cycles)
 		}
 	},
 }
