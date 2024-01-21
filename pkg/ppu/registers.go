@@ -8,26 +8,26 @@ const (
 )
 
 type LcdControl struct {
-	enabled         byte
-	wTileMapArea    byte
-	windowEnabled   byte
-	tileDataArea    byte
-	bgTileMapArea   byte
-	objSize         byte
-	objEnabled      byte
-	bgWindowEnabled byte
+	enabled          byte
+	wTileMapArea     byte
+	windowEnabled    byte
+	tileDataArea     byte
+	bgTileMapArea    byte
+	objSize          byte
+	objEnabled       byte
+	bgWindowPriority byte
 }
 
 func NewLcdControl() *LcdControl {
 	return &LcdControl{
-		enabled:         1,
-		wTileMapArea:    0,
-		windowEnabled:   0,
-		tileDataArea:    1,
-		bgTileMapArea:   0,
-		objSize:         0,
-		objEnabled:      0,
-		bgWindowEnabled: 1,
+		enabled:          1,
+		wTileMapArea:     0,
+		windowEnabled:    0,
+		tileDataArea:     1,
+		bgTileMapArea:    0,
+		objSize:          0,
+		objEnabled:       0,
+		bgWindowPriority: 1,
 	}
 }
 

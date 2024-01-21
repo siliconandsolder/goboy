@@ -17,6 +17,7 @@ const (
 	TILE_MAP_START_ONE   = 0x9C00
 	TILE_DATA_START_ZERO = 0x8000
 	TILE_DATA_START_ONE  = 0x8800
+	TILE_DATA_START_TWO  = 0x9000
 
 	BUFFER_SIZE          = 23040
 	MAX_OAMS             = 40
@@ -35,10 +36,11 @@ type Ppu struct {
 	bufferReady bool
 	pixelIdx    uint16
 
-	dot     uint16
-	pixels  byte
-	fetcher *Fetcher
-	bus     *bus.Bus
+	dot       uint16
+	pixels    byte
+	fifo      *PixelFIFO
+	bgFetcher *BgFetcher
+	bus       *bus.Bus
 }
 
 func NewPPU(bus *bus.Bus) *Ppu {
@@ -48,6 +50,8 @@ func NewPPU(bus *bus.Bus) *Ppu {
 	for i := range oamSlice {
 		oamSlice[i] = NewOamObj()
 	}
+	fifo := newFIFO()
+
 	return &Ppu{
 		lcdControl:  lcdc,
 		lcdStatus:   NewLcdStatus(),
@@ -61,7 +65,8 @@ func NewPPU(bus *bus.Bus) *Ppu {
 		pixelIdx:    0,
 		dot:         0,
 		pixels:      0,
-		fetcher:     newFetcher(bus, lcdc, scs),
+		fifo:        fifo,
+		bgFetcher:   newBgFetcher(bus, lcdc, scs, fifo),
 		bus:         bus,
 	}
 }
@@ -87,34 +92,39 @@ func (ppu *Ppu) Cycle(cycles byte) ([]uint32, error) {
 			// if match, record in lineSprites
 			// break after 10 or end of loop
 
-			//for _, oam := range ppu.oams {
-			//	if oam.posY <= (ppu.ly+16) && (ppu.ly+16) < (oam.posY+ppu.lcdControl.objSize) {
-			//		ppu.lineSprites = append(ppu.lineSprites, oam)
-			//	}
-			//	if len(ppu.lineSprites) == MAX_SPRITES_PER_LINE {
-			//		break
-			//	}
-			//}
+			for _, oam := range ppu.oams {
+				if oam.posY <= (ppu.ly+16) && (ppu.ly+16) < (oam.posY+ppu.lcdControl.objSize) {
+					ppu.lineSprites = append(ppu.lineSprites, oam)
+				}
+				if len(ppu.lineSprites) == MAX_SPRITES_PER_LINE {
+					break
+				}
+			}
 
 			if ppu.dot == MAX_OAM_SEARCH {
-				ppu.fetcher.reset(ppu.ly)
+				ppu.bgFetcher.reset(ppu.ly)
 				ppu.lcdStatus.mode = PIXEL_TRANSFER
 				ppu.bus.SetVramAccessible(false)
 			}
 			break
 		case PIXEL_TRANSFER:
 			// send pixels to display
-			ppu.fetcher.cycle()
+			ppu.bgFetcher.cycle()
 
-			if colour, popped := ppu.fetcher.fifo.pop(); popped {
+			if colour, popped := ppu.fifo.pop(); popped {
+				// check for sprite pixel
 				ppu.pixelBuffer[ppu.pixelIdx] = getColour(colour)
 				ppu.pixelIdx++
-				ppu.fetcher.lineX++
-				ppu.fetcher.resetIfWindow()
+				ppu.bgFetcher.lineX++
+				ppu.bgFetcher.resetIfWindow()
 			}
 
-			if ppu.fetcher.lineX == MAX_PIXEL_TRANSFER {
+			if ppu.bgFetcher.lineX == MAX_PIXEL_TRANSFER {
 				ppu.lcdStatus.mode = H_BLANK
+				if ppu.bgFetcher.inWindow {
+					ppu.bgFetcher.windowCounter++
+				}
+				ppu.bgFetcher.lineX = 0
 				ppu.bus.SetVramAccessible(true)
 				ppu.bus.SetOamAccessible(true)
 				if ppu.lcdStatus.hBlankStatInterrupt == 1 {
@@ -125,6 +135,7 @@ func (ppu *Ppu) Cycle(cycles byte) ([]uint32, error) {
 		case H_BLANK:
 			// wait and go to OAM search, or do vblank if ly == 144
 			if ppu.dot == SCANLINE_END {
+				ppu.bgFetcher.windowCounter = 0
 				if ppu.ly == H_BLANK_END {
 					ppu.lcdStatus.mode = V_BLANK
 				} else {
@@ -192,7 +203,7 @@ func (ppu *Ppu) readRegisters() {
 	ppu.lcdControl.bgTileMapArea = lcdControlVal >> 3 & 1
 	ppu.lcdControl.objSize = lcdControlVal >> 2 & 1
 	ppu.lcdControl.objEnabled = lcdControlVal >> 1 & 1
-	ppu.lcdControl.bgWindowEnabled = lcdControlVal & 1
+	ppu.lcdControl.bgWindowPriority = lcdControlVal & 1
 
 	lcdStatusVal := ppu.bus.Read(bus.LCD_STAT_ADDRESS)
 	ppu.lcdStatus.lycStatInterrupt = lcdStatusVal >> 6 & 1
@@ -202,6 +213,8 @@ func (ppu *Ppu) readRegisters() {
 
 	ppu.scs.scy = ppu.bus.Read(bus.SCY_ADDRESS)
 	ppu.scs.scx = ppu.bus.Read(bus.SCX_ADDRESS)
+	ppu.scs.wy = ppu.bus.Read(bus.WY_ADDRESS)
+	ppu.scs.wx = ppu.bus.Read(bus.WX_ADDRESS)
 
 	ppu.lyc = ppu.bus.Read(bus.LCD_LY_ADDRESS)
 

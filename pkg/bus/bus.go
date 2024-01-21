@@ -30,6 +30,8 @@ const (
 	LCD_Y_ADDRESS     = 0xFF44
 	LCD_LY_ADDRESS    = 0xFF45
 	DMA_TRANSFER      = 0xFF46
+	WY_ADDRESS        = 0xFF4A
+	WX_ADDRESS        = 0xFF4B
 	INTERRUPT_REQUEST = 0xFF0F
 	INTERRUPT_ENABLE  = 0xFFFF
 
@@ -50,6 +52,8 @@ type Bus struct {
 	lcdLy          byte
 	scy            byte
 	scx            byte
+	wy             byte
+	wx             byte
 	serialByte     byte
 	vramAccessible bool
 	oamAccessible  bool
@@ -70,6 +74,8 @@ func NewBus(cart *cartridge.Cartridge, manager *interrupts.Manager) *Bus {
 		lcdStat:        0x85,
 		scy:            0,
 		scx:            0,
+		wy:             0,
+		wx:             0,
 		vramAccessible: true,
 		oamAccessible:  true,
 	}
@@ -109,6 +115,10 @@ func (bus *Bus) Write(addr uint16, value byte) {
 		//fmt.Printf("LCDY: %d\n", value)
 	} else if addr == LCD_LY_ADDRESS {
 		bus.lcdLy = value
+	} else if addr == WY_ADDRESS {
+		bus.wy = value
+	} else if addr == WX_ADDRESS {
+		bus.wx = value
 	}
 }
 func (bus *Bus) Read(addr uint16) byte {
@@ -142,6 +152,10 @@ func (bus *Bus) Read(addr uint16) byte {
 		return bus.lcdY
 	} else if addr == LCD_LY_ADDRESS {
 		return bus.lcdLy
+	} else if addr == WY_ADDRESS {
+		return bus.wy
+	} else if addr == WX_ADDRESS {
+		return bus.wx
 	} else if addr >= HIGH_RAM_START && addr <= HIGH_RAM_END {
 		return bus.highRam[addr-HIGH_RAM_START]
 	}
