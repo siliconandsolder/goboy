@@ -139,7 +139,7 @@ func (bus *Bus) Read(addr uint16) byte {
 			return 0xFF
 		}
 	} else if addr == INTERRUPT_REQUEST {
-		return bus.manager.GetInterruptRequest()
+		return bus.manager.GetInterruptRequests()
 	} else if addr == LCD_CTRL_ADDRESS {
 		return bus.lcdCtrl
 	} else if addr == LCD_STAT_ADDRESS {
@@ -173,4 +173,8 @@ func (bus *Bus) SetVramAccessible(access bool) {
 
 func (bus *Bus) SetOamAccessible(access bool) {
 	bus.oamAccessible = access
+}
+
+func (bus *Bus) ToggleInterrupt(val byte) {
+	bus.manager.ToggleInterruptRequest(val)
 }

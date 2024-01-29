@@ -49,7 +49,7 @@ func (timer *SysTimer) Cycle(cycles byte) {
 				timer.timaTimer = 0
 
 				if timer.tima == 0 {
-					timer.bus.Write(bus.INTERRUPT_REQUEST, interrupts.TIMER)
+					timer.bus.ToggleInterrupt(interrupts.TIMER)
 					timer.tima = timer.tma
 					timer.timaReload = true
 				}

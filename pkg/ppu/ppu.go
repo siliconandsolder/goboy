@@ -111,31 +111,44 @@ func (ppu *Ppu) Cycle(cycles byte) ([]uint32, error) {
 			// send pixels to display
 			ppu.bgFetcher.cycle()
 
-			if colour, popped := ppu.fifo.pop(); popped {
-				// check for sprite pixel
-				ppu.pixelBuffer[ppu.pixelIdx] = getColour(colour)
-				ppu.pixelIdx++
+			//if ppu.bgFetcher.lineX == 0 && !ppu.fifo.isEmpty() {
+			//	for i := byte(0); i < ppu.scs.scx; i++ {
+			//		ppu.fifo.pop()
+			//	}
+			//}
+
+			if !ppu.fifo.isEmpty() {
+				if ppu.bgFetcher.lineX == 0 {
+					for i := byte(0); i < ppu.scs.scx%8; i++ {
+						ppu.fifo.pop()
+					}
+				}
+				if colour, popped := ppu.fifo.pop(); popped {
+					ppu.pixelBuffer[ppu.pixelIdx] = getColour(colour)
+					ppu.pixelIdx++
+				}
 				ppu.bgFetcher.lineX++
 				ppu.bgFetcher.resetIfWindow()
 			}
 
+			//if colour, popped := ppu.fifo.pop(); popped {
+			//	ppu.pixelBuffer[ppu.pixelIdx] = getColour(colour)
+			//	ppu.pixelIdx++
+			//}
+
 			if ppu.bgFetcher.lineX == MAX_PIXEL_TRANSFER {
 				ppu.lcdStatus.mode = H_BLANK
-				if ppu.bgFetcher.inWindow {
-					ppu.bgFetcher.windowCounter++
-				}
+				//ppu.renderBackground()
 				ppu.bgFetcher.lineX = 0
 				ppu.bus.SetVramAccessible(true)
 				ppu.bus.SetOamAccessible(true)
 				if ppu.lcdStatus.hBlankStatInterrupt == 1 {
-					ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.LCDSTAT)
+					ppu.bus.ToggleInterrupt(interrupts.LCDSTAT)
 				}
 			}
 			break
 		case H_BLANK:
-			// wait and go to OAM search, or do vblank if ly == 144
 			if ppu.dot == SCANLINE_END {
-				ppu.bgFetcher.windowCounter = 0
 				if ppu.ly == H_BLANK_END {
 					ppu.lcdStatus.mode = V_BLANK
 				} else {
@@ -169,17 +182,17 @@ func (ppu *Ppu) Cycle(cycles byte) ([]uint32, error) {
 			if ppu.lyc == ppu.ly {
 				ppu.lcdStatus.lycLYEqual = 1
 				if ppu.lcdStatus.lycStatInterrupt == 1 {
-					ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.LCDSTAT)
+					ppu.bus.ToggleInterrupt(interrupts.LCDSTAT)
 				}
 			}
 
 			if ppu.ly == V_BLANK_START {
-				ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.VBLANK)
+				ppu.bus.ToggleInterrupt(interrupts.VBLANK)
 				if ppu.lcdStatus.vBlankStatInterrupt == 1 {
-					ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.LCDSTAT)
+					ppu.bus.ToggleInterrupt(interrupts.LCDSTAT)
 				}
 			} else if ppu.ly < V_BLANK_START && ppu.lcdStatus.oamStatInterrupt == 1 {
-				ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.LCDSTAT)
+				ppu.bus.ToggleInterrupt(interrupts.LCDSTAT)
 			}
 		}
 	}
@@ -250,5 +263,82 @@ func (ppu *Ppu) loadOams() {
 			tileNum: oamIdx,
 			flags:   oamAttrs,
 		}
+	}
+}
+
+func (ppu *Ppu) renderBackground() {
+	var tileData uint16 = 0
+	var bgMem uint16 = 0
+	inWindow := ppu.lcdControl.windowEnabled == 1 && ppu.scs.wy <= ppu.ly
+	unsigned := true
+
+	if ppu.lcdControl.tileDataArea == 1 {
+		tileData = TILE_DATA_START_ZERO
+	} else {
+		tileData = TILE_DATA_START_ONE
+		unsigned = false
+	}
+
+	if !inWindow {
+		if ppu.lcdControl.bgTileMapArea == 1 {
+			bgMem = TILE_MAP_START_ONE
+		} else {
+			bgMem = TILE_MAP_START_ZERO
+		}
+	} else {
+		if ppu.lcdControl.wTileMapArea == 1 {
+			bgMem = TILE_MAP_START_ONE
+		} else {
+			bgMem = TILE_MAP_START_ZERO
+		}
+	}
+
+	var yPos byte = 0
+
+	if !inWindow {
+		yPos = ppu.scs.scy + ppu.ly
+	} else {
+		yPos = ppu.ly - ppu.scs.wy
+	}
+
+	var tileRow = uint16(yPos/8) * 32
+
+	var pixel byte
+	for pixel = 0; pixel < 160; pixel++ {
+
+		var xPos byte
+		if inWindow && pixel >= ppu.scs.wx {
+			xPos = pixel - ppu.scs.wx
+		} else {
+			xPos = pixel + ppu.scs.scx
+		}
+
+		var tileCol = uint16(xPos / 8)
+		var tileNum int16
+
+		tileAddr := bgMem + tileRow + tileCol
+		if unsigned {
+			tileNum = int16(ppu.bus.PpuReadVram(tileAddr))
+		} else {
+			tileNum = int16(int8(ppu.bus.PpuReadVram(tileAddr)))
+		}
+
+		tileLoc := tileData
+
+		if unsigned {
+			tileLoc += uint16(tileNum * 16)
+		} else {
+			tileLoc = uint16(int32(tileLoc) + int32((tileNum+128)*16))
+		}
+
+		line := (yPos % 8) * 2
+		dataLow := ppu.bus.PpuReadVram(tileLoc + uint16(line))
+		dataHigh := ppu.bus.PpuReadVram(tileLoc + uint16(line) + 1)
+
+		colourBit := byte(int8((xPos%8)-7) * -1)
+		colourNum := ((dataHigh>>colourBit)&1)<<1 | ((dataLow >> colourBit) & 1)
+
+		ppu.pixelBuffer[ppu.pixelIdx] = getColour(colourNum)
+		ppu.pixelIdx++
 	}
 }

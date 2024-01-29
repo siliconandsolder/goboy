@@ -94,6 +94,24 @@ func (m *Manager) SetInterruptEnable(val byte) {
 	m.joypad.enabled = val&JOYPAD == JOYPAD
 }
 
+func (m *Manager) ToggleInterruptRequest(val byte) {
+	if val&VBLANK == VBLANK {
+		m.vBlank.request = true
+	}
+	if val&LCDSTAT == LCDSTAT {
+		m.lcdStat.request = true
+	}
+	if val&TIMER == TIMER {
+		m.timer.request = true
+	}
+	if val&SERIAL == SERIAL {
+		m.serial.request = true
+	}
+	if val&JOYPAD == JOYPAD {
+		m.joypad.request = true
+	}
+}
+
 func (m *Manager) SetInterruptRequest(val byte) {
 	m.vBlank.request = val&VBLANK == VBLANK
 	m.lcdStat.request = val&LCDSTAT == LCDSTAT
@@ -102,18 +120,23 @@ func (m *Manager) SetInterruptRequest(val byte) {
 	m.joypad.request = val&JOYPAD == JOYPAD
 }
 
-func (m *Manager) GetInterruptRequest() byte {
+func (m *Manager) GetInterruptRequests() byte {
+	var intVal byte = 0
 	if m.vBlank.request {
-		return VBLANK
-	} else if m.lcdStat.request {
-		return LCDSTAT
-	} else if m.timer.request {
-		return TIMER
-	} else if m.serial.request {
-		return SERIAL
-	} else if m.joypad.request {
-		return JOYPAD
+		intVal |= VBLANK
+	}
+	if m.lcdStat.request {
+		intVal |= LCDSTAT
+	}
+	if m.timer.request {
+		intVal |= TIMER
+	}
+	if m.serial.request {
+		intVal |= SERIAL
+	}
+	if m.joypad.request {
+		intVal |= JOYPAD
 	}
 
-	return 0
+	return intVal
 }

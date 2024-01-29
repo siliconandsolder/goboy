@@ -20,42 +20,42 @@ type BgFetcher struct {
 	state       FetcherState
 	tileData    []byte
 
-	tileIdx       byte
-	tileId        byte
-	mapAddr       uint16
-	tileLine      byte
-	tileOffset    int32
-	lineX         byte
-	pixelX        byte
-	tileX         byte
-	lineY         byte
-	pixelY        byte
-	tileY         byte
-	inWindow      bool
-	windowCounter byte
+	tileIdx     byte
+	tileId      byte
+	mapAddr     uint16
+	tileLine    byte
+	tileOffset  int32
+	lineX       byte
+	pixelX      byte
+	tileX       byte
+	lineY       byte
+	pixelY      byte
+	tileY       byte
+	inWindow    bool
+	isFirstTile bool
 }
 
 func newBgFetcher(bus *bus.Bus, lcdc *LcdControl, scs *ScrollStatus, fifo *PixelFIFO) *BgFetcher {
 	return &BgFetcher{
-		fifo:          fifo,
-		bus:           bus,
-		lcdc:          lcdc,
-		scs:           scs,
-		shouldCycle:   false,
-		state:         0,
-		tileData:      make([]byte, 8),
-		tileId:        0,
-		tileOffset:    0,
-		mapAddr:       0,
-		tileLine:      0,
-		lineX:         0,
-		pixelX:        0,
-		tileX:         0,
-		lineY:         0,
-		pixelY:        0,
-		tileY:         0,
-		inWindow:      false,
-		windowCounter: 0,
+		fifo:        fifo,
+		bus:         bus,
+		lcdc:        lcdc,
+		scs:         scs,
+		shouldCycle: false,
+		state:       0,
+		tileData:    make([]byte, 8),
+		tileId:      0,
+		tileOffset:  0,
+		mapAddr:     0,
+		tileLine:    0,
+		lineX:       0,
+		pixelX:      0,
+		tileX:       0,
+		lineY:       0,
+		pixelY:      0,
+		tileY:       0,
+		inWindow:    false,
+		isFirstTile: false,
 	}
 }
 
@@ -95,15 +95,15 @@ func (f *BgFetcher) cycle() {
 
 	switch f.state {
 	case ReadTileID:
-		f.mapAddr = f.getTileMapBase() + uint16(f.tileY)*32 + uint16((f.pixelX>>3)&31) + uint16(f.tileX)
+		f.mapAddr = f.getTileMapBase() + uint16(f.tileY)*32 + uint16(((f.pixelX>>3)+f.tileX)&31)
 
 		f.tileId = f.bus.PpuReadVram(f.mapAddr)
-		if f.lcdc.tileDataArea == 1 {
-			f.tileOffset = int32(int16(f.tileId))
-		} else {
-			f.tileOffset = int32(int16(int8(f.tileId)) + 128)
-		}
-		f.tileOffset *= 16
+		//if f.lcdc.tileDataArea == 1 {
+		//	f.tileOffset = int32(int16(f.tileId))
+		//} else {
+		//	f.tileOffset = int32(int16(int8(f.tileId)) + 128)
+		//}
+		//f.tileOffset *= 16
 		f.state = ReadTileData0
 		break
 	case ReadTileData0:
@@ -130,7 +130,7 @@ func (f *BgFetcher) cycle() {
 
 func (f *BgFetcher) readTileLine(isHigh bool) {
 	// get tile data base
-	addr := f.getTileDataBase() + uint16(f.tileOffset) + uint16(f.pixelY%8)<<1
+	addr := f.getTileDataBase() + uint16(f.tileId)*16 + uint16(f.pixelY%8)<<1
 
 	if isHigh {
 		addr++
@@ -143,6 +143,11 @@ func (f *BgFetcher) readTileLine(isHigh bool) {
 		} else {
 			f.tileData[bitPos] = (data >> bitPos) & 1
 		}
+	}
+
+	if isHigh && f.isFirstTile {
+		f.isFirstTile = false
+		f.state = ReadTileID
 	}
 }
 

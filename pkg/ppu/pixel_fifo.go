@@ -46,3 +46,7 @@ func (p *PixelFIFO) clear() {
 	p.size = 0
 	p.queue = make([]byte, 16)
 }
+
+func (p *PixelFIFO) isEmpty() bool {
+	return p.size == 0
+}
