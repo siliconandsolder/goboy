@@ -137,8 +137,7 @@ func (ppu *Ppu) Cycle(cycles byte) ([]uint32, error) {
 			// TODO: find a way to tell PPU that sprite has been loaded into FIFO, do not pop bg FIFO until fg FIFO is ready
 			if ppu.fgFetcher.spriteToFetch != nil {
 				ppu.fgFetcher.cycle(ppu.shouldCycle)
-			}
-			if sprite := ppu.checkForSprite(); sprite != nil {
+			} else if sprite := ppu.checkForSprite(); sprite != nil {
 				ppu.fgFetcher.spriteToFetch = sprite
 			}
 
@@ -335,9 +334,6 @@ func (ppu *Ppu) loadOams() {
 }
 
 func (ppu *Ppu) checkForSprite() *OamObj {
-	if ppu.fgFetcher.spriteToFetch != nil {
-		return nil
-	}
 	for _, sprite := range ppu.lineSprites {
 		if sprite.posX <= ppu.x+8 {
 			ppu.lineSprites = slices.Delete(ppu.lineSprites, 0, 1)
