@@ -2,108 +2,77 @@ package ppu
 
 import "github.com/siliconandsolder/go-boy/pkg/bus"
 
-type FetcherState byte
-
-const (
-	ReadTileID FetcherState = iota
-	ReadTileData0
-	ReadTileData1
-	PushToFIFO
-)
-
 type BgFetcher struct {
-	fifo        *PixelFIFO
-	bus         *bus.Bus
-	lcdc        *LcdControl
-	scs         *ScrollStatus
-	shouldCycle bool
-	state       FetcherState
-	tileData    []byte
+	fifo     *PixelFIFO
+	bus      *bus.Bus
+	lcdc     *LcdControl
+	scs      *ScrollStatus
+	state    FetcherState
+	tileData []byte
 
-	tileIdx     byte
-	tileId      byte
-	mapAddr     uint16
-	tileLine    byte
-	tileOffset  int32
-	lineX       byte
-	pixelX      byte
-	tileX       byte
-	lineY       byte
-	pixelY      byte
-	tileY       byte
-	inWindow    bool
-	isFirstTile bool
+	tileIdx       byte
+	tileId        byte
+	mapAddr       uint16
+	tileLine      byte
+	tileOffset    int32
+	pixelX        byte
+	fetcherX      byte
+	pixelY        byte
+	tileY         byte
+	windowCounter byte
+	inWindow      bool
+	isFirstTile   bool
 }
 
-func newBgFetcher(bus *bus.Bus, lcdc *LcdControl, scs *ScrollStatus, fifo *PixelFIFO) *BgFetcher {
+func newBgFetcher(bus *bus.Bus, lcdc *LcdControl, scs *ScrollStatus) *BgFetcher {
 	return &BgFetcher{
-		fifo:        fifo,
-		bus:         bus,
-		lcdc:        lcdc,
-		scs:         scs,
-		shouldCycle: false,
-		state:       0,
-		tileData:    make([]byte, 8),
-		tileId:      0,
-		tileOffset:  0,
-		mapAddr:     0,
-		tileLine:    0,
-		lineX:       0,
-		pixelX:      0,
-		tileX:       0,
-		lineY:       0,
-		pixelY:      0,
-		tileY:       0,
-		inWindow:    false,
-		isFirstTile: false,
+		fifo:          newFIFO(true),
+		bus:           bus,
+		lcdc:          lcdc,
+		scs:           scs,
+		state:         0,
+		tileData:      make([]byte, 8),
+		tileId:        0,
+		tileOffset:    0,
+		mapAddr:       0,
+		tileLine:      0,
+		pixelX:        0,
+		fetcherX:      0,
+		pixelY:        0,
+		tileY:         0,
+		windowCounter: 0,
+		inWindow:      false,
+		isFirstTile:   false,
 	}
 }
 
-func (f *BgFetcher) reset(lineY byte) {
-	f.lineY = lineY
+func (f *BgFetcher) reset(lineX byte, lineY byte) {
 	f.state = ReadTileID
 
-	if f.lcdc.windowEnabled == 1 && f.lineY >= f.scs.wy {
-		f.pixelY = lineY - f.scs.wy
-	} else {
-		f.pixelY = f.scs.scy + lineY
-	}
-	f.tileY = (f.pixelY >> 3) & 31
-	if f.lcdc.windowEnabled == 1 && f.lineY >= f.scs.wy && f.lineX >= (f.scs.wx-7) {
+	if f.lcdc.windowEnabled == 1 && lineY >= f.scs.wy && lineX >= (f.scs.wx-7) {
+		f.pixelY = f.windowCounter
+		f.pixelX = lineX - (f.scs.wx - 7)
 		f.inWindow = true
 	} else {
+		f.pixelY = f.scs.scy + lineY
+		f.pixelX = f.scs.scx + lineX
 		f.inWindow = false
 	}
+	f.tileY = (f.pixelY >> 3) & 31
 
-	if f.inWindow {
-		f.pixelX = f.lineX - (f.scs.wx - 7)
-	} else {
-		f.pixelX = f.scs.scx + f.lineX
-	}
-
-	f.tileX = 0
+	f.fetcherX = 0
 	f.fifo.clear()
 }
 
-func (f *BgFetcher) cycle() {
-	if !f.shouldCycle {
-		f.shouldCycle = true
+func (f *BgFetcher) cycle(shouldCycle bool) {
+	if !shouldCycle {
 		return
 	}
 
-	f.shouldCycle = false
-
 	switch f.state {
 	case ReadTileID:
-		f.mapAddr = f.getTileMapBase() + uint16(f.tileY)*32 + uint16(((f.pixelX>>3)+f.tileX)&31)
-
+		f.mapAddr = f.getTileMapBase() + uint16(f.tileY)*32 + uint16(((f.pixelX>>3)+f.fetcherX)&31)
 		f.tileId = f.bus.PpuReadVram(f.mapAddr)
-		//if f.lcdc.tileDataArea == 1 {
-		//	f.tileOffset = int32(int16(f.tileId))
-		//} else {
-		//	f.tileOffset = int32(int16(int8(f.tileId)) + 128)
-		//}
-		//f.tileOffset *= 16
 		f.state = ReadTileData0
 		break
 	case ReadTileData0:
@@ -117,11 +86,11 @@ func (f *BgFetcher) cycle() {
 	case PushToFIFO:
 		if f.fifo.size <= 8 {
 			for i := 7; i >= 0; i-- {
-				if err := f.fifo.push(f.tileData[i]); err != nil {
+				if err := f.fifo.push(newPixel(f.tileData[i], 0xFF47, 0)); err != nil {
 					panic(err)
 				}
 			}
-			f.tileX++
+			f.fetcherX++
 			f.state = ReadTileID
 		}
 		break
@@ -151,11 +120,11 @@ func (f *BgFetcher) readTileLine(isHigh bool) {
 	}
 }
 
-func (f *BgFetcher) resetIfWindow() {
+func (f *BgFetcher) resetIfWindow(lineX byte, lineY byte) {
 	// stop pushing to FIFO, we reached the window
 	realWx := f.scs.wx - 7
-	if f.lcdc.windowEnabled == 1 && f.lineY >= f.scs.wy && f.lineX >= realWx {
-		f.reset(f.lineY)
+	if !f.inWindow && f.lcdc.windowEnabled == 1 && lineY >= f.scs.wy && lineX >= realWx {
+		f.reset(lineX, lineY)
 	}
 }
 

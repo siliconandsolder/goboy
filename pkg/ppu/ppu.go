@@ -1,8 +1,10 @@
 package ppu
 
 import (
+	"cmp"
 	"github.com/siliconandsolder/go-boy/pkg/bus"
 	"github.com/siliconandsolder/go-boy/pkg/interrupts"
+	"slices"
 )
 
 const (
@@ -24,23 +26,35 @@ const (
 	MAX_SPRITES_PER_LINE = 10
 )
 
+type FetcherState byte
+
+const (
+	ReadTileID FetcherState = iota
+	ReadTileData0
+	ReadTileData1
+	PushToFIFO
+)
+
 type Ppu struct {
 	lcdControl  *LcdControl
 	lcdStatus   *LcdStatus
 	scs         *ScrollStatus
 	ly          byte
 	lyc         byte
+	x           byte
 	oams        []*OamObj
 	lineSprites []*OamObj
 	pixelBuffer []uint32
 	bufferReady bool
 	pixelIdx    uint16
 
-	dot       uint16
-	pixels    byte
-	fifo      *PixelFIFO
-	bgFetcher *BgFetcher
-	bus       *bus.Bus
+	dot            uint16
+	pixels         byte
+	bgFetcher      *BgFetcher
+	fgFetcher      *SpriteFetcher
+	fetchingSprite bool
+	shouldCycle    bool
+	bus            *bus.Bus
 }
 
 func NewPPU(bus *bus.Bus) *Ppu {
@@ -50,7 +64,6 @@ func NewPPU(bus *bus.Bus) *Ppu {
 	for i := range oamSlice {
 		oamSlice[i] = NewOamObj()
 	}
-	fifo := newFIFO()
 
 	return &Ppu{
 		lcdControl:  lcdc,
@@ -58,6 +71,7 @@ func NewPPU(bus *bus.Bus) *Ppu {
 		scs:         scs,
 		ly:          0,
 		lyc:         0,
+		x:           0,
 		oams:        oamSlice,
 		lineSprites: make([]*OamObj, 0, MAX_SPRITES_PER_LINE),
 		pixelBuffer: make([]uint32, BUFFER_SIZE),
@@ -65,8 +79,8 @@ func NewPPU(bus *bus.Bus) *Ppu {
 		pixelIdx:    0,
 		dot:         0,
 		pixels:      0,
-		fifo:        fifo,
-		bgFetcher:   newBgFetcher(bus, lcdc, scs, fifo),
+		bgFetcher:   newBgFetcher(bus, lcdc, scs),
+		fgFetcher:   newSpriteFetcher(bus, lcdc),
 		bus:         bus,
 	}
 }
@@ -78,7 +92,7 @@ func (ppu *Ppu) Cycle(cycles byte) ([]uint32, error) {
 		if ppu.lcdControl.enabled == 0 {
 			ppu.bus.SetOamAccessible(true)
 			ppu.bus.SetVramAccessible(true)
-			return nil, nil
+			continue // wait for all cycles to complete
 		}
 
 		//if ppu.lcdStatus.lycLYEqual == 1 && ppu.dot == 0 && ppu.lcdStatus.lycStatInterrupt == 1 {
@@ -92,54 +106,98 @@ func (ppu *Ppu) Cycle(cycles byte) ([]uint32, error) {
 			// if match, record in lineSprites
 			// break after 10 or end of loop
 
-			for _, oam := range ppu.oams {
-				if oam.posY <= (ppu.ly+16) && (ppu.ly+16) < (oam.posY+ppu.lcdControl.objSize) {
-					ppu.lineSprites = append(ppu.lineSprites, oam)
-				}
-				if len(ppu.lineSprites) == MAX_SPRITES_PER_LINE {
-					break
-				}
-			}
-
 			if ppu.dot == MAX_OAM_SEARCH {
-				ppu.bgFetcher.reset(ppu.ly)
+				ppu.lineSprites = make([]*OamObj, 0, MAX_SPRITES_PER_LINE)
+				var spriteSize byte
+				if ppu.lcdControl.objSize == 0 {
+					spriteSize = 8
+				} else {
+					spriteSize = 16
+				}
+				for _, oam := range ppu.oams {
+					if oam.posY <= (ppu.ly+16) && (ppu.ly+16) < (oam.posY+spriteSize) {
+						ppu.lineSprites = append(ppu.lineSprites, oam)
+					}
+					if len(ppu.lineSprites) == MAX_SPRITES_PER_LINE {
+						break
+					}
+				}
+
+				slices.SortStableFunc(ppu.lineSprites, func(a, b *OamObj) int {
+					return cmp.Compare(a.posX, b.posX)
+				})
+
+				ppu.bgFetcher.reset(ppu.x, ppu.ly)
+				ppu.fgFetcher.reset(ppu.ly)
 				ppu.lcdStatus.mode = PIXEL_TRANSFER
 				ppu.bus.SetVramAccessible(false)
 			}
 			break
 		case PIXEL_TRANSFER:
-			// send pixels to display
-			ppu.bgFetcher.cycle()
+			// TODO: find a way to tell PPU that sprite has been loaded into FIFO, do not pop bg FIFO until fg FIFO is ready
+			if ppu.fgFetcher.spriteToFetch != nil {
+				ppu.fgFetcher.cycle(ppu.shouldCycle)
+			}
+			if sprite := ppu.checkForSprite(); sprite != nil {
+				ppu.fgFetcher.spriteToFetch = sprite
+			}
 
-			//if ppu.bgFetcher.lineX == 0 && !ppu.fifo.isEmpty() {
-			//	for i := byte(0); i < ppu.scs.scx; i++ {
-			//		ppu.fifo.pop()
+			ppu.bgFetcher.cycle(ppu.shouldCycle)
+			//ppu.bgFetcher.cycle(ppu.shouldCycle)
+			ppu.shouldCycle = !ppu.shouldCycle
+
+			//if !ppu.fetchingSprite {
+			//	for _, sprite := range ppu.lineSprites {
+			//		if sprite.posX == ppu.x {
+			//			ppu.fetchingSprite = true
+			//			ppu.fgFetcher.spriteToFetch = sprite
+			//		}
 			//	}
 			//}
 
-			if !ppu.fifo.isEmpty() {
-				if ppu.bgFetcher.lineX == 0 {
+			if !ppu.bgFetcher.fifo.isEmpty() && ppu.fgFetcher.spriteToFetch == nil {
+				if ppu.x == 0 {
 					for i := byte(0); i < ppu.scs.scx%8; i++ {
-						ppu.fifo.pop()
+						ppu.bgFetcher.fifo.pop()
 					}
 				}
-				if colour, popped := ppu.fifo.pop(); popped {
+				if !ppu.fgFetcher.fifo.isEmpty() {
+					bgPixel := ppu.bgFetcher.fifo.pop()
+					fgPixel := ppu.fgFetcher.fifo.pop()
+
+					if ppu.lcdControl.bgWindowEnabled == 0 {
+						bgPixel.colourNum = 0
+					}
+					if ppu.lcdControl.objEnabled == 0 {
+						fgPixel.colourNum = 0
+					}
+
+					if fgPixel.colourNum == 0 || (fgPixel.priority == 1 && bgPixel.colourNum != 0) {
+						colour := (ppu.bus.Read(bgPixel.paletteAddr) & (0x3 << (bgPixel.colourNum * 2))) >> (bgPixel.colourNum * 2)
+						ppu.pixelBuffer[ppu.pixelIdx] = getColour(colour)
+						ppu.pixelIdx++
+					} else {
+						colour := (ppu.bus.Read(fgPixel.paletteAddr) & (0x3 << (fgPixel.colourNum * 2))) >> (fgPixel.colourNum * 2)
+						ppu.pixelBuffer[ppu.pixelIdx] = getColour(colour)
+						ppu.pixelIdx++
+					}
+				} else {
+					pixel := ppu.bgFetcher.fifo.pop()
+					if ppu.lcdControl.bgWindowEnabled == 0 {
+						pixel.colourNum = 0
+					}
+					colour := (ppu.bus.Read(pixel.paletteAddr) & (0x3 << (pixel.colourNum * 2))) >> (pixel.colourNum * 2)
 					ppu.pixelBuffer[ppu.pixelIdx] = getColour(colour)
 					ppu.pixelIdx++
 				}
-				ppu.bgFetcher.lineX++
-				ppu.bgFetcher.resetIfWindow()
+
+				ppu.x++
+				ppu.bgFetcher.resetIfWindow(ppu.x, ppu.ly)
 			}
 
-			//if colour, popped := ppu.fifo.pop(); popped {
-			//	ppu.pixelBuffer[ppu.pixelIdx] = getColour(colour)
-			//	ppu.pixelIdx++
-			//}
-
-			if ppu.bgFetcher.lineX == MAX_PIXEL_TRANSFER {
+			if ppu.x == MAX_PIXEL_TRANSFER {
 				ppu.lcdStatus.mode = H_BLANK
-				//ppu.renderBackground()
-				ppu.bgFetcher.lineX = 0
+				ppu.x = 0
 				ppu.bus.SetVramAccessible(true)
 				ppu.bus.SetOamAccessible(true)
 				if ppu.lcdStatus.hBlankStatInterrupt == 1 {
@@ -148,8 +206,13 @@ func (ppu *Ppu) Cycle(cycles byte) ([]uint32, error) {
 			}
 			break
 		case H_BLANK:
+			if ppu.bgFetcher.inWindow {
+				ppu.bgFetcher.windowCounter++
+				ppu.bgFetcher.inWindow = false
+			}
 			if ppu.dot == SCANLINE_END {
 				if ppu.ly == H_BLANK_END {
+					ppu.bgFetcher.windowCounter = 0
 					ppu.lcdStatus.mode = V_BLANK
 				} else {
 					ppu.lcdStatus.mode = OAM_SEARCH
@@ -216,7 +279,7 @@ func (ppu *Ppu) readRegisters() {
 	ppu.lcdControl.bgTileMapArea = lcdControlVal >> 3 & 1
 	ppu.lcdControl.objSize = lcdControlVal >> 2 & 1
 	ppu.lcdControl.objEnabled = lcdControlVal >> 1 & 1
-	ppu.lcdControl.bgWindowPriority = lcdControlVal & 1
+	ppu.lcdControl.bgWindowEnabled = lcdControlVal & 1
 
 	lcdStatusVal := ppu.bus.Read(bus.LCD_STAT_ADDRESS)
 	ppu.lcdStatus.lycStatInterrupt = lcdStatusVal >> 6 & 1
@@ -252,93 +315,35 @@ func (ppu *Ppu) writeRegisters() {
 
 func (ppu *Ppu) loadOams() {
 	for i := 0; i < MAX_OAMS; i++ {
-		oamY := ppu.bus.Read(uint16(bus.OAM_START + i*4))
-		oamX := ppu.bus.Read(uint16(bus.OAM_START + i*4 + 1))
-		oamIdx := ppu.bus.Read(uint16(bus.OAM_START + i*4 + 2))
-		oamAttrs := ppu.bus.Read(uint16(bus.OAM_START + i*4 + 3))
+		oamY := ppu.bus.PpuReadOam(uint16(i * 4))
+		oamX := ppu.bus.PpuReadOam(uint16(i*4 + 1))
+		oamIdx := ppu.bus.PpuReadOam(uint16(i*4 + 2))
+		oamAttrs := ppu.bus.PpuReadOam(uint16(i*4 + 3))
 
 		ppu.oams[i] = &OamObj{
 			posX:    oamX,
 			posY:    oamY,
 			tileNum: oamIdx,
-			flags:   oamAttrs,
+			attributes: OamAttributes{
+				priority: oamAttrs >> 7 & 1,
+				yFlip:    oamAttrs >> 6 & 1,
+				xFlip:    oamAttrs >> 5 & 1,
+				palette:  oamAttrs >> 4 & 1,
+			},
 		}
 	}
 }
 
-func (ppu *Ppu) renderBackground() {
-	var tileData uint16 = 0
-	var bgMem uint16 = 0
-	inWindow := ppu.lcdControl.windowEnabled == 1 && ppu.scs.wy <= ppu.ly
-	unsigned := true
-
-	if ppu.lcdControl.tileDataArea == 1 {
-		tileData = TILE_DATA_START_ZERO
-	} else {
-		tileData = TILE_DATA_START_ONE
-		unsigned = false
+func (ppu *Ppu) checkForSprite() *OamObj {
+	if ppu.fgFetcher.spriteToFetch != nil {
+		return nil
 	}
-
-	if !inWindow {
-		if ppu.lcdControl.bgTileMapArea == 1 {
-			bgMem = TILE_MAP_START_ONE
-		} else {
-			bgMem = TILE_MAP_START_ZERO
-		}
-	} else {
-		if ppu.lcdControl.wTileMapArea == 1 {
-			bgMem = TILE_MAP_START_ONE
-		} else {
-			bgMem = TILE_MAP_START_ZERO
+	for _, sprite := range ppu.lineSprites {
+		if sprite.posX <= ppu.x+8 {
+			ppu.lineSprites = slices.Delete(ppu.lineSprites, 0, 1)
+			return sprite
 		}
 	}
 
-	var yPos byte = 0
-
-	if !inWindow {
-		yPos = ppu.scs.scy + ppu.ly
-	} else {
-		yPos = ppu.ly - ppu.scs.wy
-	}
-
-	var tileRow = uint16(yPos/8) * 32
-
-	var pixel byte
-	for pixel = 0; pixel < 160; pixel++ {
-
-		var xPos byte
-		if inWindow && pixel >= ppu.scs.wx {
-			xPos = pixel - ppu.scs.wx
-		} else {
-			xPos = pixel + ppu.scs.scx
-		}
-
-		var tileCol = uint16(xPos / 8)
-		var tileNum int16
-
-		tileAddr := bgMem + tileRow + tileCol
-		if unsigned {
-			tileNum = int16(ppu.bus.PpuReadVram(tileAddr))
-		} else {
-			tileNum = int16(int8(ppu.bus.PpuReadVram(tileAddr)))
-		}
-
-		tileLoc := tileData
-
-		if unsigned {
-			tileLoc += uint16(tileNum * 16)
-		} else {
-			tileLoc = uint16(int32(tileLoc) + int32((tileNum+128)*16))
-		}
-
-		line := (yPos % 8) * 2
-		dataLow := ppu.bus.PpuReadVram(tileLoc + uint16(line))
-		dataHigh := ppu.bus.PpuReadVram(tileLoc + uint16(line) + 1)
-
-		colourBit := byte(int8((xPos%8)-7) * -1)
-		colourNum := ((dataHigh>>colourBit)&1)<<1 | ((dataLow >> colourBit) & 1)
-
-		ppu.pixelBuffer[ppu.pixelIdx] = getColour(colourNum)
-		ppu.pixelIdx++
-	}
+	return nil
 }

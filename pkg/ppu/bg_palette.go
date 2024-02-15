@@ -1,7 +1,7 @@
 package ppu
 
-func getColour(colourIdx byte) uint32 {
-	switch colourIdx {
+func getColour(idx byte) uint32 {
+	switch idx {
 	case 0: // white
 		return 0xFFFFFFFF
 	case 1: // light grey

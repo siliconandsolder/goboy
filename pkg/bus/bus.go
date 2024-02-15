@@ -30,6 +30,9 @@ const (
 	LCD_Y_ADDRESS     = 0xFF44
 	LCD_LY_ADDRESS    = 0xFF45
 	DMA_TRANSFER      = 0xFF46
+	BG_PALETTE        = 0xFF47
+	FG_PALETTE_ZERO   = 0xFF48
+	FG_PALETTE_ONE    = 0xFF49
 	WY_ADDRESS        = 0xFF4A
 	WX_ADDRESS        = 0xFF4B
 	INTERRUPT_REQUEST = 0xFF0F
@@ -55,6 +58,9 @@ type Bus struct {
 	wy             byte
 	wx             byte
 	serialByte     byte
+	bgPalette      byte
+	fgPaletteZero  byte
+	fgPaletteOne   byte
 	vramAccessible bool
 	oamAccessible  bool
 
@@ -115,6 +121,12 @@ func (bus *Bus) Write(addr uint16, value byte) {
 		//fmt.Printf("LCDY: %d\n", value)
 	} else if addr == LCD_LY_ADDRESS {
 		bus.lcdLy = value
+	} else if addr == BG_PALETTE {
+		bus.bgPalette = value
+	} else if addr == FG_PALETTE_ZERO {
+		bus.fgPaletteZero = value
+	} else if addr == FG_PALETTE_ONE {
+		bus.fgPaletteOne = value
 	} else if addr == WY_ADDRESS {
 		bus.wy = value
 	} else if addr == WX_ADDRESS {
@@ -152,6 +164,12 @@ func (bus *Bus) Read(addr uint16) byte {
 		return bus.lcdY
 	} else if addr == LCD_LY_ADDRESS {
 		return bus.lcdLy
+	} else if addr == BG_PALETTE {
+		return bus.bgPalette
+	} else if addr == FG_PALETTE_ZERO {
+		return bus.fgPaletteZero
+	} else if addr == FG_PALETTE_ONE {
+		return bus.fgPaletteOne
 	} else if addr == WY_ADDRESS {
 		return bus.wy
 	} else if addr == WX_ADDRESS {
@@ -165,6 +183,10 @@ func (bus *Bus) Read(addr uint16) byte {
 
 func (bus *Bus) PpuReadVram(addr uint16) byte {
 	return bus.videoRam[addr-VRAM_START]
+}
+
+func (bus *Bus) PpuReadOam(addr uint16) byte {
+	return bus.oam[addr]
 }
 
 func (bus *Bus) SetVramAccessible(access bool) {

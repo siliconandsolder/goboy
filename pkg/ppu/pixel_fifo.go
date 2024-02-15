@@ -2,22 +2,45 @@ package ppu
 
 import "fmt"
 
-const MAX_SIZE = 16
+const MAX_SIZE_BG = 16
+const MAX_SIZE_FG = 8
 
-type PixelFIFO struct {
-	queue []byte
-	size  int
+type Pixel struct {
+	colourNum   byte
+	paletteAddr uint16
+	priority    byte
 }
 
-func newFIFO() *PixelFIFO {
-	return &PixelFIFO{
-		queue: make([]byte, 16),
-		size:  0,
+func newPixel(colourNum byte, paletteAddr uint16, priority byte) *Pixel {
+	return &Pixel{
+		colourNum:   colourNum,
+		paletteAddr: paletteAddr,
+		priority:    priority,
 	}
 }
 
-func (p *PixelFIFO) push(pixel byte) error {
-	if p.size == MAX_SIZE {
+type PixelFIFO struct {
+	queue        []*Pixel
+	size         int
+	isBackground bool
+}
+
+func newFIFO(isBackground bool) *PixelFIFO {
+	var queue []*Pixel
+	if isBackground {
+		queue = make([]*Pixel, MAX_SIZE_BG)
+	} else {
+		queue = make([]*Pixel, MAX_SIZE_FG)
+	}
+	return &PixelFIFO{
+		queue:        queue,
+		size:         0,
+		isBackground: isBackground,
+	}
+}
+
+func (p *PixelFIFO) push(pixel *Pixel) error {
+	if p.size == MAX_SIZE_BG {
 		return fmt.Errorf("pixel fifo is full")
 	}
 	p.size++
@@ -26,9 +49,9 @@ func (p *PixelFIFO) push(pixel byte) error {
 	return nil
 }
 
-func (p *PixelFIFO) pop() (byte, bool) {
+func (p *PixelFIFO) pop() *Pixel {
 	if p.size == 0 {
-		return 0, false
+		return nil
 	}
 	p.size--
 
@@ -37,14 +60,18 @@ func (p *PixelFIFO) pop() (byte, bool) {
 	for i := 0; i < p.size; i++ {
 		p.queue[i] = p.queue[i+1]
 	}
-	p.queue[p.size] = 0 // zero the back of the queue
+	p.queue[p.size] = nil // zero the back of the queue
 
-	return retVal, true
+	return retVal
 }
 
 func (p *PixelFIFO) clear() {
 	p.size = 0
-	p.queue = make([]byte, 16)
+	if p.isBackground {
+		p.queue = make([]*Pixel, MAX_SIZE_BG)
+	} else {
+		p.queue = make([]*Pixel, MAX_SIZE_FG)
+	}
 }
 
 func (p *PixelFIFO) isEmpty() bool {

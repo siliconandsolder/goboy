@@ -218,7 +218,7 @@ func (cpu *Cpu) writeToBus(addr uint16, val byte) {
 
 	cpu.bus.Write(addr, val)
 
-	if addr == 0xFF46 {
+	if addr == DMA_TRANSFER_ADDRESS {
 		cpu.dmaTransfer = true
 	}
 }

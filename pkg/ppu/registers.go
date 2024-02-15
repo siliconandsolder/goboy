@@ -8,26 +8,26 @@ const (
 )
 
 type LcdControl struct {
-	enabled          byte
-	wTileMapArea     byte
-	windowEnabled    byte
-	tileDataArea     byte
-	bgTileMapArea    byte
-	objSize          byte
-	objEnabled       byte
-	bgWindowPriority byte
+	enabled         byte
+	wTileMapArea    byte
+	windowEnabled   byte
+	tileDataArea    byte
+	bgTileMapArea   byte
+	objSize         byte
+	objEnabled      byte
+	bgWindowEnabled byte
 }
 
 func NewLcdControl() *LcdControl {
 	return &LcdControl{
-		enabled:          1,
-		wTileMapArea:     0,
-		windowEnabled:    0,
-		tileDataArea:     1,
-		bgTileMapArea:    0,
-		objSize:          0,
-		objEnabled:       0,
-		bgWindowPriority: 1,
+		enabled:         0,
+		wTileMapArea:    0,
+		windowEnabled:   0,
+		tileDataArea:    0,
+		bgTileMapArea:   0,
+		objSize:         0,
+		objEnabled:      0,
+		bgWindowEnabled: 0,
 	}
 }
 
@@ -47,7 +47,7 @@ func NewLcdStatus() *LcdStatus {
 		vBlankStatInterrupt: 0,
 		hBlankStatInterrupt: 0,
 		lycLYEqual:          0,
-		mode:                H_BLANK,
+		mode:                OAM_SEARCH,
 	}
 }
 
@@ -67,11 +67,18 @@ func NewScrollStatus() *ScrollStatus {
 	}
 }
 
+type OamAttributes struct {
+	priority byte
+	yFlip    byte
+	xFlip    byte
+	palette  byte
+}
+
 type OamObj struct {
-	posX    byte
-	posY    byte
-	tileNum byte
-	flags   byte
+	posX       byte
+	posY       byte
+	tileNum    byte
+	attributes OamAttributes
 }
 
 func NewOamObj() *OamObj {
@@ -79,6 +86,11 @@ func NewOamObj() *OamObj {
 		posX:    0,
 		posY:    0,
 		tileNum: 0,
-		flags:   0,
+		attributes: OamAttributes{
+			priority: 0,
+			yFlip:    0,
+			xFlip:    0,
+			palette:  0,
+		},
 	}
 }
