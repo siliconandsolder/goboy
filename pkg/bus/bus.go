@@ -88,6 +88,42 @@ func NewBus(cart *cartridge.Cartridge, manager *interrupts.Manager) *Bus {
 }
 
 func (bus *Bus) Write(addr uint16, value byte) {
+
+	switch addr {
+	case INTERRUPT_REQUEST:
+		bus.manager.SetInterruptRequest(value)
+	case INTERRUPT_ENABLE:
+		bus.manager.SetInterruptEnable(value)
+	case SERIAL_TRANSFER_DATA:
+		bus.serialByte = value
+	case SERIAL_TRANSFER_CONTROL:
+		if value == 0x81 {
+			fmt.Print(fmt.Sprintf("%c", bus.serialByte))
+		}
+	case LCD_CTRL_ADDRESS:
+		bus.lcdCtrl = value
+	case LCD_STAT_ADDRESS:
+		bus.lcdStat = value
+	case SCY_ADDRESS:
+		bus.scy = value
+	case SCX_ADDRESS:
+		bus.scx = value
+	case LCD_Y_ADDRESS:
+		bus.lcdY = value
+	case LCD_LY_ADDRESS:
+		bus.lcdLy = value
+	case BG_PALETTE:
+		bus.bgPalette = value
+	case FG_PALETTE_ZERO:
+		bus.fgPaletteZero = value
+	case FG_PALETTE_ONE:
+		bus.fgPaletteOne = value
+	case WY_ADDRESS:
+		bus.wy = value
+	case WX_ADDRESS:
+		bus.wx = value
+	}
+
 	if addr <= CART_END {
 		bus.cart.Write(addr, value)
 	} else if addr >= VRAM_START && addr <= VRAM_END && bus.vramAccessible {
@@ -98,42 +134,36 @@ func (bus *Bus) Write(addr uint16, value byte) {
 		bus.oam[addr-OAM_START] = value
 	} else if addr >= HIGH_RAM_START && addr <= HIGH_RAM_END {
 		bus.highRam[addr-HIGH_RAM_START] = value
-	} else if addr == INTERRUPT_REQUEST {
-		bus.manager.SetInterruptRequest(value)
-	} else if addr == INTERRUPT_ENABLE {
-		bus.manager.SetInterruptEnable(value)
-	} else if addr == SERIAL_TRANSFER_DATA {
-		bus.serialByte = value
-	} else if addr == SERIAL_TRANSFER_CONTROL {
-		if value == 0x81 {
-			fmt.Print(fmt.Sprintf("%c", bus.serialByte))
-		}
-	} else if addr == LCD_CTRL_ADDRESS {
-		bus.lcdCtrl = value
-	} else if addr == LCD_STAT_ADDRESS {
-		bus.lcdStat = value
-	} else if addr == SCY_ADDRESS {
-		bus.scy = value
-	} else if addr == SCX_ADDRESS {
-		bus.scx = value
-	} else if addr == LCD_Y_ADDRESS {
-		bus.lcdY = value
-		//fmt.Printf("LCDY: %d\n", value)
-	} else if addr == LCD_LY_ADDRESS {
-		bus.lcdLy = value
-	} else if addr == BG_PALETTE {
-		bus.bgPalette = value
-	} else if addr == FG_PALETTE_ZERO {
-		bus.fgPaletteZero = value
-	} else if addr == FG_PALETTE_ONE {
-		bus.fgPaletteOne = value
-	} else if addr == WY_ADDRESS {
-		bus.wy = value
-	} else if addr == WX_ADDRESS {
-		bus.wx = value
 	}
 }
 func (bus *Bus) Read(addr uint16) byte {
+	switch addr {
+	case INTERRUPT_REQUEST:
+		return bus.manager.GetInterruptRequests()
+	case LCD_CTRL_ADDRESS:
+		return bus.lcdCtrl
+	case LCD_STAT_ADDRESS:
+		return bus.lcdStat
+	case SCY_ADDRESS:
+		return bus.scy
+	case SCX_ADDRESS:
+		return bus.scx
+	case LCD_Y_ADDRESS:
+		return bus.lcdY
+	case LCD_LY_ADDRESS:
+		return bus.lcdLy
+	case BG_PALETTE:
+		return bus.bgPalette
+	case FG_PALETTE_ZERO:
+		return bus.fgPaletteZero
+	case FG_PALETTE_ONE:
+		return bus.fgPaletteOne
+	case WY_ADDRESS:
+		return bus.wy
+	case WX_ADDRESS:
+		return bus.wx
+	}
+
 	if addr <= CART_END {
 		return bus.cart.Read(addr)
 	} else if addr >= VRAM_START && addr <= VRAM_END {
@@ -150,30 +180,6 @@ func (bus *Bus) Read(addr uint16) byte {
 		} else {
 			return 0xFF
 		}
-	} else if addr == INTERRUPT_REQUEST {
-		return bus.manager.GetInterruptRequests()
-	} else if addr == LCD_CTRL_ADDRESS {
-		return bus.lcdCtrl
-	} else if addr == LCD_STAT_ADDRESS {
-		return bus.lcdStat
-	} else if addr == SCY_ADDRESS {
-		return bus.scy
-	} else if addr == SCX_ADDRESS {
-		return bus.scx
-	} else if addr == LCD_Y_ADDRESS {
-		return bus.lcdY
-	} else if addr == LCD_LY_ADDRESS {
-		return bus.lcdLy
-	} else if addr == BG_PALETTE {
-		return bus.bgPalette
-	} else if addr == FG_PALETTE_ZERO {
-		return bus.fgPaletteZero
-	} else if addr == FG_PALETTE_ONE {
-		return bus.fgPaletteOne
-	} else if addr == WY_ADDRESS {
-		return bus.wy
-	} else if addr == WX_ADDRESS {
-		return bus.wx
 	} else if addr >= HIGH_RAM_START && addr <= HIGH_RAM_END {
 		return bus.highRam[addr-HIGH_RAM_START]
 	}

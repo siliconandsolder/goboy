@@ -10,7 +10,6 @@ type BgFetcher struct {
 	state    FetcherState
 	tileData []byte
 
-	tileIdx       byte
 	tileId        byte
 	mapAddr       uint16
 	tileLine      byte

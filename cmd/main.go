@@ -46,7 +46,7 @@ var cmd = &cobra.Command{
 		//	H: winHeight,
 		//}
 
-		cart := cartridge.NewCartridge("./roms/dmg-acid2.gb")
+		cart := cartridge.NewCartridge("./roms/mts/acceptance/oam_dma/basic.gb")
 		m := interrupts.NewManager()
 		b := bus.NewBus(cart, m)
 		t := cpu.NewSysTimer(b)
