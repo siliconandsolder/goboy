@@ -210,11 +210,11 @@ func (bus *Bus) PpuReadOam(addr uint16) byte {
 }
 
 func (bus *Bus) SetVramAccessible(access bool) {
-	bus.vramAccessible = true
+	bus.vramAccessible = access
 }
 
 func (bus *Bus) SetOamAccessible(access bool) {
-	bus.oamAccessible = true
+	bus.oamAccessible = access
 }
 
 func (bus *Bus) ToggleInterrupt(val byte) {
