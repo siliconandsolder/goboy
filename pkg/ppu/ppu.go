@@ -92,7 +92,11 @@ func (ppu *Ppu) Cycle(cycles byte) ([]uint32, error) {
 		if ppu.lcdControl.enabled == 0 {
 			ppu.bus.SetOamAccessible(true)
 			ppu.bus.SetVramAccessible(true)
-			continue // wait for all cycles to complete
+			ppu.lcdStatus.mode = 0
+			ppu.pixelIdx = 0
+			ppu.ly = 0
+			ppu.bufferReady = false
+			break // wait for all cycles to complete
 		}
 
 		//if ppu.lcdStatus.lycLYEqual == 1 && ppu.dot == 0 && ppu.lcdStatus.lycStatInterrupt == 1 {

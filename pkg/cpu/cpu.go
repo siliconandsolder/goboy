@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	DMA_TRANSFER_TIME    = 160
+	DMA_TRANSFER_TIME    = 640
 	HALT_CYCLES          = 4
 	INTERRUPT_CYCLES     = 20
 	DMA_TRANSFER_ADDRESS = 0xFF46
@@ -37,7 +37,7 @@ type Cpu struct {
 	interruptEnabled bool
 
 	dmaTransfer  bool
-	dmaCountdown byte
+	dmaCountdown int16
 
 	// CGB only
 	doubleSpeed bool
@@ -66,7 +66,7 @@ func NewCpu(bus *bus.Bus, manager *interrupts.Manager, timer *SysTimer) *Cpu {
 		DE:               de,
 		HL:               hl,
 		SP:               0xFFFE,
-		PC:               0x0100,
+		PC:               0x0000,
 		waitCycles:       0,
 		halt:             false,
 		interruptEnabled: false,
@@ -90,22 +90,19 @@ func (cpu *Cpu) Cycle() (byte, error) {
 
 	cpu.waitCycles = 0
 
-	if cpu.dmaTransfer {
-		cpu.doDmaTransfer()
-		return DMA_TRANSFER_TIME, nil
-	}
-
 	//if cpu.dmaCountdown > 0 {
 	//	cpu.dmaCountdown--
 	//	return nil
 	//}
 
 	if cpu.handleInterrupts() {
+		cpu.decrementDMA(INTERRUPT_CYCLES)
 		return INTERRUPT_CYCLES, nil
 	}
 
 	// halt until an interrupt is requested
 	if cpu.halt {
+		cpu.decrementDMA(HALT_CYCLES)
 		return HALT_CYCLES, nil
 	}
 
@@ -131,6 +128,7 @@ func (cpu *Cpu) Cycle() (byte, error) {
 	}
 	//fmt.Println(fmt.Sprintf("Opcode: %s  - PC: %d, AF: %d, BC: %d, DE: %d, HL: %d, SP: %d", opCode.toString, cpu.PC, cpu.AF.getAll(), cpu.BC.getAll(), cpu.DE.getAll(), cpu.HL.getAll(), cpu.SP))
 	//cpu.waitCycles -= 1 // accounts for current cycle
+	cpu.decrementDMA(cpu.waitCycles)
 	return cpu.waitCycles, nil
 }
 
@@ -207,7 +205,7 @@ func (cpu *Cpu) pcReadNext16() uint16 {
 }
 
 func (cpu *Cpu) writeToBus(addr uint16, val byte) {
-	if cpu.dmaTransfer && addr < 0xFE00 {
+	if cpu.dmaTransfer && addr < 0xFF80 {
 		return
 	}
 
@@ -218,13 +216,13 @@ func (cpu *Cpu) writeToBus(addr uint16, val byte) {
 
 	cpu.bus.Write(addr, val)
 
-	if addr == DMA_TRANSFER_ADDRESS {
-		cpu.dmaTransfer = true
+	if addr == DMA_TRANSFER_ADDRESS && !cpu.dmaTransfer {
+		cpu.doDmaTransfer()
 	}
 }
 
 func (cpu *Cpu) readFromBus(addr uint16) byte {
-	if cpu.dmaTransfer && addr < 0xFE00 {
+	if cpu.dmaTransfer && addr < 0xFF80 {
 		return 0xFF
 	}
 
@@ -236,15 +234,14 @@ func (cpu *Cpu) readFromBus(addr uint16) byte {
 }
 
 func (cpu *Cpu) doDmaTransfer() {
-	startAddr := uint16(cpu.bus.Read(DMA_TRANSFER_ADDRESS)) << 8
-	endAddr := startAddr | 0x009F
-
-	for i := startAddr; i <= endAddr; i++ {
-		oamVal := cpu.bus.Read(i)
+	startAddr := (uint16(cpu.bus.Read(DMA_TRANSFER_ADDRESS)) & 0x00DF) << 8
+	for i := uint16(0); i <= 0x9F; i++ {
+		oamVal := cpu.bus.Read(startAddr + i)
 		cpu.bus.Write(0xFE00|(i&0x00FF), oamVal)
 	}
 
-	cpu.dmaTransfer = false
+	cpu.dmaTransfer = true
+	cpu.dmaCountdown = DMA_TRANSFER_TIME
 }
 
 func (cpu *Cpu) handleInterrupts() bool {
@@ -286,4 +283,13 @@ func (cpu *Cpu) handleInterrupts() bool {
 	cpu.interruptEnabled = false
 
 	return true
+}
+
+func (cpu *Cpu) decrementDMA(cycles byte) {
+	if cpu.dmaTransfer {
+		cpu.dmaCountdown -= int16(cycles)
+		if cpu.dmaCountdown <= 0 {
+			cpu.dmaTransfer = false
+		}
+	}
 }

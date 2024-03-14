@@ -16,6 +16,10 @@ const (
 	INTERNAL_RAM_START = 0xC000
 	INTERNAL_RAM_END   = 0xDFFF
 
+	CONTROLLER = 0xFF00
+
+	DMA_SOURCE = 0xFF46
+
 	OAM_START = 0xFE00
 	OAM_END   = 0xFE9F
 
@@ -49,6 +53,7 @@ type Bus struct {
 	videoRam       []byte
 	highRam        []byte
 	oam            []byte
+	dmaSource      byte
 	lcdCtrl        byte
 	lcdStat        byte
 	lcdY           byte
@@ -75,6 +80,7 @@ func NewBus(cart *cartridge.Cartridge, manager *interrupts.Manager) *Bus {
 		videoRam:       make([]byte, 8192), // bitshift to upper bank
 		highRam:        make([]byte, 127),
 		oam:            make([]byte, 160),
+		dmaSource:      0,
 		serialByte:     0,
 		lcdCtrl:        0x95,
 		lcdStat:        0x85,
@@ -100,6 +106,8 @@ func (bus *Bus) Write(addr uint16, value byte) {
 		if value == 0x81 {
 			fmt.Print(fmt.Sprintf("%c", bus.serialByte))
 		}
+	case DMA_SOURCE:
+		bus.dmaSource = value
 	case LCD_CTRL_ADDRESS:
 		bus.lcdCtrl = value
 	case LCD_STAT_ADDRESS:
@@ -138,8 +146,12 @@ func (bus *Bus) Write(addr uint16, value byte) {
 }
 func (bus *Bus) Read(addr uint16) byte {
 	switch addr {
+	case CONTROLLER:
+		return 0xFF
 	case INTERRUPT_REQUEST:
 		return bus.manager.GetInterruptRequests()
+	case INTERRUPT_ENABLE:
+		return bus.manager.GetEnabledInterrupts()
 	case LCD_CTRL_ADDRESS:
 		return bus.lcdCtrl
 	case LCD_STAT_ADDRESS:
@@ -148,6 +160,8 @@ func (bus *Bus) Read(addr uint16) byte {
 		return bus.scy
 	case SCX_ADDRESS:
 		return bus.scx
+	case DMA_SOURCE:
+		return bus.dmaSource
 	case LCD_Y_ADDRESS:
 		return bus.lcdY
 	case LCD_LY_ADDRESS:
@@ -196,11 +210,11 @@ func (bus *Bus) PpuReadOam(addr uint16) byte {
 }
 
 func (bus *Bus) SetVramAccessible(access bool) {
-	bus.vramAccessible = access
+	bus.vramAccessible = true
 }
 
 func (bus *Bus) SetOamAccessible(access bool) {
-	bus.oamAccessible = access
+	bus.oamAccessible = true
 }
 
 func (bus *Bus) ToggleInterrupt(val byte) {

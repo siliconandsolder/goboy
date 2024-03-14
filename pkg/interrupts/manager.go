@@ -140,3 +140,24 @@ func (m *Manager) GetInterruptRequests() byte {
 
 	return intVal
 }
+
+func (m *Manager) GetEnabledInterrupts() byte {
+	var intVal byte = 0
+	if m.vBlank.enabled {
+		intVal |= VBLANK
+	}
+	if m.lcdStat.enabled {
+		intVal |= LCDSTAT
+	}
+	if m.timer.enabled {
+		intVal |= TIMER
+	}
+	if m.serial.enabled {
+		intVal |= SERIAL
+	}
+	if m.joypad.enabled {
+		intVal |= JOYPAD
+	}
+
+	return intVal
+}
