@@ -9,6 +9,7 @@ import (
 	"github.com/siliconandsolder/go-boy/pkg/ppu"
 	"github.com/spf13/cobra"
 	"github.com/veandco/go-sdl2/sdl"
+	"math"
 )
 
 var cmd = &cobra.Command{
@@ -54,6 +55,8 @@ var cmd = &cobra.Command{
 		c := cpu.NewCpu(b, m, t)
 		p := ppu.NewPPU(b)
 
+		var end uint64 = 0
+		var start uint64 = sdl.GetPerformanceCounter()
 		// TODO: return cycles from cpu, pass them to ppu and then timer
 
 		for {
@@ -85,6 +88,16 @@ var cmd = &cobra.Command{
 				renderer.Clear()
 				renderer.Copy(texture, nil, nil)
 				renderer.Present()
+
+				end = sdl.GetPerformanceCounter()
+
+				elapsedMS := float32(end-start) / float32(sdl.GetPerformanceFrequency()) * 1000.0
+				delayMS := 16.666 - elapsedMS
+				if delayMS >= 0.0 {
+					sdl.Delay(uint32(math.Floor(float64(delayMS))))
+				}
+
+				start = sdl.GetPerformanceCounter()
 			}
 		}
 	},
