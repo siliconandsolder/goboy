@@ -3,6 +3,7 @@ package bus
 import (
 	"fmt"
 	"github.com/siliconandsolder/go-boy/pkg/cartridge"
+	"github.com/siliconandsolder/go-boy/pkg/controller"
 	"github.com/siliconandsolder/go-boy/pkg/interrupts"
 )
 
@@ -54,6 +55,7 @@ type Bus struct {
 	highRam        []byte
 	oam            []byte
 	dmaSource      byte
+	controller     *controller.Controller
 	lcdCtrl        byte
 	lcdStat        byte
 	lcdY           byte
@@ -72,7 +74,7 @@ type Bus struct {
 	manager *interrupts.Manager
 }
 
-func NewBus(cart *cartridge.Cartridge, manager *interrupts.Manager) *Bus {
+func NewBus(cart *cartridge.Cartridge, manager *interrupts.Manager, c *controller.Controller) *Bus {
 	return &Bus{
 		cart:           cart,
 		manager:        manager,
@@ -81,6 +83,7 @@ func NewBus(cart *cartridge.Cartridge, manager *interrupts.Manager) *Bus {
 		highRam:        make([]byte, 127),
 		oam:            make([]byte, 160),
 		dmaSource:      0,
+		controller:     c,
 		serialByte:     0,
 		lcdCtrl:        0x95,
 		lcdStat:        0x85,
@@ -96,6 +99,8 @@ func NewBus(cart *cartridge.Cartridge, manager *interrupts.Manager) *Bus {
 func (bus *Bus) Write(addr uint16, value byte) {
 
 	switch addr {
+	case CONTROLLER:
+		bus.controller.SetButtonSelectors(value)
 	case INTERRUPT_REQUEST:
 		bus.manager.SetInterruptRequest(value)
 	case INTERRUPT_ENABLE:
@@ -147,7 +152,7 @@ func (bus *Bus) Write(addr uint16, value byte) {
 func (bus *Bus) Read(addr uint16) byte {
 	switch addr {
 	case CONTROLLER:
-		return 0xFF
+		return bus.controller.GetJoypadValue()
 	case INTERRUPT_REQUEST:
 		return bus.manager.GetInterruptRequests()
 	case INTERRUPT_ENABLE:

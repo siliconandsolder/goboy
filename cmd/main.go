@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/siliconandsolder/go-boy/pkg/bus"
 	"github.com/siliconandsolder/go-boy/pkg/cartridge"
+	"github.com/siliconandsolder/go-boy/pkg/controller"
 	"github.com/siliconandsolder/go-boy/pkg/cpu"
 	"github.com/siliconandsolder/go-boy/pkg/interrupts"
 	"github.com/siliconandsolder/go-boy/pkg/ppu"
@@ -48,15 +49,16 @@ var cmd = &cobra.Command{
 		//}
 
 		// TODO: implement stub controller that returns 0xFF
+		ctrl := controller.NewController()
 		cart := cartridge.NewCartridge("./roms/dmg-acid2.gb")
 		m := interrupts.NewManager()
-		b := bus.NewBus(cart, m)
+		b := bus.NewBus(cart, m, ctrl)
 		t := cpu.NewSysTimer(b)
 		c := cpu.NewCpu(b, m, t)
 		p := ppu.NewPPU(b)
 
 		var end uint64 = 0
-		var start uint64 = sdl.GetPerformanceCounter()
+		start := sdl.GetPerformanceCounter()
 		// TODO: return cycles from cpu, pass them to ppu and then timer
 
 		for {
@@ -88,6 +90,10 @@ var cmd = &cobra.Command{
 				renderer.Clear()
 				renderer.Copy(texture, nil, nil)
 				renderer.Present()
+
+				if ctrl.CheckJoypad() {
+					b.ToggleInterrupt(interrupts.JOYPAD)
+				}
 
 				end = sdl.GetPerformanceCounter()
 
