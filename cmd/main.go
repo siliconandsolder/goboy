@@ -50,7 +50,7 @@ var cmd = &cobra.Command{
 
 		// TODO: implement stub controller that returns 0xFF
 		ctrl := controller.NewController()
-		cart := cartridge.NewCartridge("./roms/dmg-acid2.gb")
+		cart := cartridge.NewCartridge("./roms/mario.gb")
 		m := interrupts.NewManager()
 		b := bus.NewBus(cart, m, ctrl)
 		t := cpu.NewSysTimer(b)
@@ -59,7 +59,8 @@ var cmd = &cobra.Command{
 
 		var end uint64 = 0
 		start := sdl.GetPerformanceCounter()
-		// TODO: return cycles from cpu, pass them to ppu and then timer
+
+		var prevDivTimer byte = 0
 
 		for {
 			cycles, err := c.Cycle()
@@ -67,6 +68,16 @@ var cmd = &cobra.Command{
 				panic(err)
 			}
 			t.Cycle(cycles)
+
+			curDivTimer := b.Read(cpu.DIV_TIMER_ADDRESS)
+
+			// check for falling edge on bit 4
+			if (prevDivTimer>>4&1) == 1 && (curDivTimer>>4&1) == 0 {
+				// cycle timer
+			}
+
+			prevDivTimer = curDivTimer
+
 			if buffer, err := p.Cycle(cycles); err != nil {
 				panic(err)
 			} else if buffer != nil {

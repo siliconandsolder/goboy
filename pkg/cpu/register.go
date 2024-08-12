@@ -7,30 +7,14 @@ type Register struct {
 
 func NewRegister() *Register {
 	return &Register{
-		upper: NewHalfRegister(),
-		lower: NewHalfRegister(),
+		upper: &HalfRegister{value: 0},
+		lower: &HalfRegister{value: 0},
 	}
 }
-
-//func (reg *Register) getHigh() byte {
-//	return byte(reg.value >> 8)
-//}
-//
-//func (reg *Register) getLow() byte {
-//	return byte(reg.value & 0x00FF)
-//}
 
 func (reg *Register) getAll() uint16 {
 	return uint16(reg.upper.value)<<8 | uint16(reg.lower.value)
 }
-
-//func (reg *Register) setHigh(val byte) {
-//	reg.value = (uint16(val) << 8) | (reg.value & 0x00FF)
-//}
-//
-//func (reg *Register) setLow(val byte) {
-//	reg.value = (reg.value & 0xFF00) | uint16(val)
-//}
 
 func (reg *Register) setAll(val uint16) {
 	//reg.value = val

@@ -79,7 +79,7 @@ func NewCpu(bus *bus.Bus, manager *interrupts.Manager, timer *SysTimer) *Cpu {
 
 func (cpu *Cpu) Cycle() (byte, error) {
 
-	//if err := cpu.timer.Cycle(); err != nil {
+	//if err := cpu.timer.CycleFrameSequencer(); err != nil {
 	//	return err
 	//}
 	//

@@ -2,6 +2,7 @@ package bus
 
 import (
 	"fmt"
+	"github.com/siliconandsolder/go-boy/pkg/audio"
 	"github.com/siliconandsolder/go-boy/pkg/cartridge"
 	"github.com/siliconandsolder/go-boy/pkg/controller"
 	"github.com/siliconandsolder/go-boy/pkg/interrupts"
@@ -18,6 +19,34 @@ const (
 	INTERNAL_RAM_END   = 0xDFFF
 
 	CONTROLLER = 0xFF00
+
+	GLOBAL_MASTER_CONTROL = 0xFF26
+	GLOBAL_SOUND_PAN      = 0xFF25
+	GLOBAL_MASTER_VOLUME  = 0xFF24
+
+	CHANNEL_ONE_SWEEP       = 0xFF10
+	CHANNEL_ONE_LENGTH      = 0xFF11
+	CHANNEL_ONE_VOLUME      = 0xFF12
+	CHANNEL_ONE_PERIOD_LOW  = 0xFF13
+	CHANNEL_ONE_PERIOD_HIGH = 0xFF14
+
+	CHANNEL_TWO_LENGTH      = 0xFF16
+	CHANNEL_TWO_VOLUME      = 0xFF17
+	CHANNEL_TWO_PERIOD_LOW  = 0xFF18
+	CHANNEL_TWO_PERIOD_HIGH = 0xFF19
+
+	CHANNEL_THREE_DAC         = 0xFF1A
+	CHANNEL_THREE_LENGTH      = 0xFF1B
+	CHANNEL_THREE_OUTPUT      = 0xFF1C
+	CHANNEL_THREE_PERIOD_LOW  = 0xFF1D
+	CHANNEL_THREE_PERIOD_HIGH = 0xFF1E
+	CHANNEL_THREE_WAVE_START  = 0xFF30
+	CHANNEL_THREE_WAVE_END    = 0xFF3F
+
+	CHANNEL_FOUR_LENGTH  = 0xFF20
+	CHANNEL_FOUR_VOLUME  = 0xFF21
+	CHANNEL_FOUR_FREQ    = 0xFF22
+	CHANNEL_FOUR_CONTROL = 0xFF23
 
 	DMA_SOURCE = 0xFF46
 
@@ -72,6 +101,8 @@ type Bus struct {
 	oamAccessible  bool
 
 	manager *interrupts.Manager
+
+	soundChip *audio.SoundChip
 }
 
 func NewBus(cart *cartridge.Cartridge, manager *interrupts.Manager, c *controller.Controller) *Bus {
@@ -135,6 +166,48 @@ func (bus *Bus) Write(addr uint16, value byte) {
 		bus.wy = value
 	case WX_ADDRESS:
 		bus.wx = value
+	case GLOBAL_MASTER_CONTROL:
+		bus.soundChip.Global.MasterControl |= value & 0x80
+	case GLOBAL_SOUND_PAN:
+		bus.soundChip.Global.Panning = value
+	case GLOBAL_MASTER_VOLUME:
+		bus.soundChip.Global.MasterVolume = value
+	case CHANNEL_ONE_SWEEP:
+		bus.soundChip.Pulse1.Sweep = value
+	case CHANNEL_ONE_LENGTH:
+		bus.soundChip.Pulse1.DutyLength = value
+	case CHANNEL_ONE_VOLUME:
+		bus.soundChip.Pulse1.VolumeEnv = value
+	case CHANNEL_ONE_PERIOD_LOW:
+		bus.soundChip.Pulse1.PeriodLow = value
+	case CHANNEL_ONE_PERIOD_HIGH:
+		bus.soundChip.Pulse1.PeriodHigh = value
+	case CHANNEL_TWO_LENGTH:
+		bus.soundChip.Pulse2.DutyLength = value
+	case CHANNEL_TWO_VOLUME:
+		bus.soundChip.Pulse2.VolumeEnv = value
+	case CHANNEL_TWO_PERIOD_LOW:
+		bus.soundChip.Pulse2.PeriodLow = value
+	case CHANNEL_TWO_PERIOD_HIGH:
+		bus.soundChip.Pulse2.PeriodHigh = value
+	case CHANNEL_THREE_DAC:
+		bus.soundChip.Wave.DacEnabled = value
+	case CHANNEL_THREE_LENGTH:
+		bus.soundChip.Wave.Length = value
+	case CHANNEL_THREE_OUTPUT:
+		bus.soundChip.Wave.Output = value
+	case CHANNEL_THREE_PERIOD_LOW:
+		bus.soundChip.Wave.PeriodLow = value
+	case CHANNEL_THREE_PERIOD_HIGH:
+		bus.soundChip.Wave.PeriodHigh = value
+	case CHANNEL_FOUR_LENGTH:
+		bus.soundChip.Noise.Length = value
+	case CHANNEL_FOUR_VOLUME:
+		bus.soundChip.Noise.Volume = value
+	case CHANNEL_FOUR_FREQ:
+		bus.soundChip.Noise.Frequency = value
+	case CHANNEL_FOUR_CONTROL:
+		bus.soundChip.Noise.Control = value
 	}
 
 	if addr <= CART_END {
@@ -147,6 +220,8 @@ func (bus *Bus) Write(addr uint16, value byte) {
 		bus.oam[addr-OAM_START] = value
 	} else if addr >= HIGH_RAM_START && addr <= HIGH_RAM_END {
 		bus.highRam[addr-HIGH_RAM_START] = value
+	} else if addr >= CHANNEL_THREE_WAVE_START && addr <= CHANNEL_THREE_WAVE_END {
+		bus.soundChip.Wave.WaveRam[addr-CHANNEL_THREE_WAVE_START] = value
 	}
 }
 func (bus *Bus) Read(addr uint16) byte {
@@ -181,6 +256,38 @@ func (bus *Bus) Read(addr uint16) byte {
 		return bus.wy
 	case WX_ADDRESS:
 		return bus.wx
+	case GLOBAL_MASTER_CONTROL:
+		return bus.soundChip.Global.MasterControl
+	case GLOBAL_SOUND_PAN:
+		return bus.soundChip.Global.Panning
+	case GLOBAL_MASTER_VOLUME:
+		return bus.soundChip.Global.MasterVolume
+	case CHANNEL_ONE_SWEEP:
+		return bus.soundChip.Pulse1.Sweep
+	case CHANNEL_ONE_LENGTH:
+		return bus.soundChip.Pulse1.DutyLength & 192
+	case CHANNEL_ONE_VOLUME:
+		return bus.soundChip.Pulse1.VolumeEnv
+	case CHANNEL_ONE_PERIOD_HIGH:
+		return bus.soundChip.Pulse1.PeriodHigh & 64
+	case CHANNEL_TWO_LENGTH:
+		return bus.soundChip.Pulse2.DutyLength & 64
+	case CHANNEL_TWO_VOLUME:
+		return bus.soundChip.Pulse2.VolumeEnv
+	case CHANNEL_TWO_PERIOD_HIGH:
+		return bus.soundChip.Pulse2.PeriodHigh & 192
+	case CHANNEL_THREE_DAC:
+		return bus.soundChip.Wave.DacEnabled
+	case CHANNEL_THREE_OUTPUT:
+		return bus.soundChip.Wave.Output
+	case CHANNEL_THREE_PERIOD_HIGH:
+		return bus.soundChip.Wave.PeriodHigh & 64
+	case CHANNEL_FOUR_VOLUME:
+		return bus.soundChip.Noise.Volume
+	case CHANNEL_FOUR_FREQ:
+		return bus.soundChip.Noise.Frequency
+	case CHANNEL_FOUR_CONTROL:
+		return bus.soundChip.Noise.Control & 64
 	}
 
 	if addr <= CART_END {
@@ -201,6 +308,8 @@ func (bus *Bus) Read(addr uint16) byte {
 		}
 	} else if addr >= HIGH_RAM_START && addr <= HIGH_RAM_END {
 		return bus.highRam[addr-HIGH_RAM_START]
+	} else if addr >= CHANNEL_THREE_WAVE_START && addr <= CHANNEL_THREE_WAVE_END {
+		return bus.soundChip.Wave.WaveRam[addr-CHANNEL_THREE_WAVE_START]
 	}
 
 	return 0
