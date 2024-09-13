@@ -48,7 +48,6 @@ var cmd = &cobra.Command{
 		//	H: winHeight,
 		//}
 
-		// TODO: implement stub controller that returns 0xFF
 		ctrl := controller.NewController()
 		cart := cartridge.NewCartridge("./roms/mario.gb")
 		m := interrupts.NewManager()
@@ -60,6 +59,7 @@ var cmd = &cobra.Command{
 		var end uint64 = 0
 		start := sdl.GetPerformanceCounter()
 
+		var vBuffer []uint32
 		var prevDivTimer byte = 0
 
 		for {
@@ -78,15 +78,15 @@ var cmd = &cobra.Command{
 
 			prevDivTimer = curDivTimer
 
-			if buffer, err := p.Cycle(cycles); err != nil {
+			if vBuffer, err = p.Cycle(cycles); err != nil {
 				panic(err)
-			} else if buffer != nil {
+			} else if vBuffer != nil {
 				pixels, _, err := texture.Lock(nil)
 				//fmt.Sprintf("pixels: %v\n", pixels)
-				for i := 0; i < len(buffer); i++ {
-					red := byte(buffer[i] >> 24)
-					green := byte(buffer[i] >> 16 & 0xFF)
-					blue := byte(buffer[i] >> 8 & 0xFF)
+				for i := 0; i < len(vBuffer); i++ {
+					red := byte(vBuffer[i] >> 24)
+					green := byte(vBuffer[i] >> 16 & 0xFF)
+					blue := byte(vBuffer[i] >> 8 & 0xFF)
 
 					pixels[i*4] = 0xFF // alpha
 					pixels[i*4+1] = blue
