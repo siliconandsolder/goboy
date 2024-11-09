@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/siliconandsolder/go-boy/pkg/audio"
 	"github.com/siliconandsolder/go-boy/pkg/bus"
 	"github.com/siliconandsolder/go-boy/pkg/cartridge"
 	"github.com/siliconandsolder/go-boy/pkg/controller"
@@ -48,10 +49,22 @@ var cmd = &cobra.Command{
 		//	H: winHeight,
 		//}
 
+		player := audio.NewPlayer()
+		if err := player.Start(); err != nil {
+			panic(err)
+		}
+		defer func(player *audio.Player) {
+			err := player.Close()
+			if err != nil {
+				panic(err)
+			}
+		}(player)
+
 		ctrl := controller.NewController()
 		cart := cartridge.NewCartridge("./roms/mario.gb")
 		m := interrupts.NewManager()
-		b := bus.NewBus(cart, m, ctrl)
+		s := audio.NewSoundChip(player)
+		b := bus.NewBus(cart, m, ctrl, s)
 		t := cpu.NewSysTimer(b)
 		c := cpu.NewCpu(b, m, t)
 		p := ppu.NewPPU(b)
@@ -68,12 +81,12 @@ var cmd = &cobra.Command{
 				panic(err)
 			}
 			t.Cycle(cycles)
+			s.Cycle(cycles)
 
 			curDivTimer := b.Read(cpu.DIV_TIMER_ADDRESS)
-
-			// check for falling edge on bit 4
-			if (prevDivTimer>>4&1) == 1 && (curDivTimer>>4&1) == 0 {
-				// cycle timer
+			// check for falling edge on bit 5
+			if (prevDivTimer>>5&1) == 1 && (curDivTimer>>5&1) == 0 {
+				s.CycleFrameSequencer()
 			}
 
 			prevDivTimer = curDivTimer
@@ -82,6 +95,9 @@ var cmd = &cobra.Command{
 				panic(err)
 			} else if vBuffer != nil {
 				pixels, _, err := texture.Lock(nil)
+				if err != nil {
+					panic(err)
+				}
 				//fmt.Sprintf("pixels: %v\n", pixels)
 				for i := 0; i < len(vBuffer); i++ {
 					red := byte(vBuffer[i] >> 24)
@@ -93,9 +109,7 @@ var cmd = &cobra.Command{
 					pixels[i*4+2] = green
 					pixels[i*4+3] = red
 				}
-				if err != nil {
-					panic(err)
-				}
+
 				texture.Unlock()
 
 				renderer.Clear()

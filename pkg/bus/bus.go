@@ -105,10 +105,11 @@ type Bus struct {
 	soundChip *audio.SoundChip
 }
 
-func NewBus(cart *cartridge.Cartridge, manager *interrupts.Manager, c *controller.Controller) *Bus {
+func NewBus(cart *cartridge.Cartridge, manager *interrupts.Manager, c *controller.Controller, soundChip *audio.SoundChip) *Bus {
 	return &Bus{
 		cart:           cart,
 		manager:        manager,
+		soundChip:      soundChip,
 		internalRam:    make([]byte, 8192),
 		videoRam:       make([]byte, 8192), // bitshift to upper bank
 		highRam:        make([]byte, 127),

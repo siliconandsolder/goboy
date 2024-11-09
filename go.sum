@@ -3,6 +3,8 @@ github.com/ebitengine/oto/v3 v3.2.0 h1:FuggTJTSI3/3hEYwZEIN0CZVXYT29ZOdCu+z/f4Qj
 github.com/ebitengine/oto/v3 v3.2.0/go.mod h1:dOKXShvy1EQbIXhXPFcKLargdnFqH0RjptecvyAxhyw=
 github.com/ebitengine/purego v0.7.0 h1:HPZpl61edMGCEW6XK2nsR6+7AnJ3unUxpTZBkkIXnMc=
 github.com/ebitengine/purego v0.7.0/go.mod h1:ah1In8AOtksoNK6yk5z1HTJeUkC1Ez4Wk2idgGslMwQ=
+github.com/gordonklaus/portaudio v0.0.0-20230709114228-aafa478834f5 h1:5AlozfqaVjGYGhms2OsdUyfdJME76E6rx5MdGpjzZpc=
+github.com/gordonklaus/portaudio v0.0.0-20230709114228-aafa478834f5/go.mod h1:WY8R6YKlI2ZI3UyzFk7P6yGSuS+hFwNtEzrexRyD7Es=
 github.com/hajimehoshi/go-mp3 v0.3.4 h1:NUP7pBYH8OguP4diaTZ9wJbUbk3tC0KlfzsEpWmYj68=
 github.com/hajimehoshi/go-mp3 v0.3.4/go.mod h1:fRtZraRFcWb0pu7ok0LqyFhCUrPeMsGRSVop0eemFmo=
 github.com/hajimehoshi/oto v1.0.1 h1:8AMnq0Yr2YmzaiqTg/k1Yzd6IygUGk2we9nmjgbgPn4=

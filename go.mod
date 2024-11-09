@@ -10,6 +10,7 @@ require (
 require (
 	github.com/ebitengine/oto/v3 v3.2.0 // indirect
 	github.com/ebitengine/purego v0.7.0 // indirect
+	github.com/gordonklaus/portaudio v0.0.0-20230709114228-aafa478834f5 // indirect
 	github.com/hajimehoshi/go-mp3 v0.3.4 // indirect
 	github.com/hajimehoshi/oto v1.0.1 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
