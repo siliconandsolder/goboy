@@ -54,10 +54,8 @@ var cmd = &cobra.Command{
 			panic(err)
 		}
 		defer func(player *audio.Player) {
-			err := player.Close()
-			if err != nil {
-				panic(err)
-			}
+			sdl.CloseAudio()
+			player.Close()
 		}(player)
 
 		ctrl := controller.NewController()

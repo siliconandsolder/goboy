@@ -73,7 +73,7 @@ func (s *SoundChip) Cycle(cycles byte) {
 
 			mixedSample := pulse1Sample + pulse2Sample + waveSample + noiseSample
 			s.player.SendSample(mixedSample)
-			for len(s.player.channel) > 2048 {
+			for len(s.player.channel) > 1024 {
 				sdl.Delay(1)
 			}
 		}
