@@ -61,7 +61,7 @@ func (s *SoundChip) Cycle(cycles byte) {
 			if s.Global.pulse2Enabled {
 				pulse2Sample = s.Pulse2.getSample()
 			}
-
+			//
 			if s.Global.waveEnabled {
 				waveSample = s.Wave.getSample()
 			}
@@ -71,7 +71,7 @@ func (s *SoundChip) Cycle(cycles byte) {
 			//	noiseSample = s.Noise.getSample()
 			//}
 
-			mixedSample := float32(pulse1Sample+pulse2Sample+waveSample+noiseSample) / 100.0
+			mixedSample := pulse1Sample + pulse2Sample + waveSample + noiseSample
 			s.player.SendSample(mixedSample)
 			for len(s.player.channel) > 2048 {
 				sdl.Delay(1)
