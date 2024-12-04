@@ -11,7 +11,6 @@ import (
 	"github.com/siliconandsolder/go-boy/pkg/ppu"
 	"github.com/spf13/cobra"
 	"github.com/veandco/go-sdl2/sdl"
-	"math"
 )
 
 var cmd = &cobra.Command{
@@ -42,19 +41,11 @@ var cmd = &cobra.Command{
 		}
 		defer texture.Destroy()
 
-		//rect := sdl.Rect{
-		//	X: 0,
-		//	Y: 0,
-		//	W: winWidth,
-		//	H: winHeight,
-		//}
-
 		player := audio.NewPlayer()
 		if err := player.Start(); err != nil {
 			panic(err)
 		}
 		defer func(player *audio.Player) {
-			sdl.CloseAudio()
 			player.Close()
 		}(player)
 
@@ -66,9 +57,6 @@ var cmd = &cobra.Command{
 		t := cpu.NewSysTimer(b)
 		c := cpu.NewCpu(b, m, t)
 		p := ppu.NewPPU(b)
-
-		var end uint64 = 0
-		start := sdl.GetPerformanceCounter()
 
 		var vBuffer []uint32
 		var prevDivTimer byte = 0
@@ -110,23 +98,17 @@ var cmd = &cobra.Command{
 
 				texture.Unlock()
 
-				renderer.Clear()
-				renderer.Copy(texture, nil, nil)
+				if err := renderer.Clear(); err != nil {
+					panic(err)
+				}
+				if err := renderer.Copy(texture, nil, nil); err != nil {
+					panic(err)
+				}
 				renderer.Present()
 
 				if ctrl.CheckJoypad() {
 					b.ToggleInterrupt(interrupts.JOYPAD)
 				}
-
-				end = sdl.GetPerformanceCounter()
-
-				elapsedMS := float32(end-start) / float32(sdl.GetPerformanceFrequency()) * 1000.0
-				delayMS := 16.666 - elapsedMS
-				if delayMS >= 0.0 {
-					sdl.Delay(uint32(math.Floor(float64(delayMS))))
-				}
-
-				start = sdl.GetPerformanceCounter()
 			}
 		}
 	},

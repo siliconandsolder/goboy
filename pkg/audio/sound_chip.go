@@ -1,8 +1,6 @@
 package audio
 
-import (
-	"github.com/veandco/go-sdl2/sdl"
-)
+import "github.com/veandco/go-sdl2/sdl"
 
 const LENGTH_TIMER_MAX = 64
 const LENGTH_TIMER_WAVE_MAX = 256
@@ -73,7 +71,7 @@ func (s *SoundChip) Cycle(cycles byte) {
 
 			mixedSample := pulse1Sample + pulse2Sample + waveSample + noiseSample
 			s.player.SendSample(mixedSample)
-			for len(s.player.channel) > 1024 {
+			for len(s.player.channel) > AUDIO_FREQ/30 {
 				sdl.Delay(1)
 			}
 		}

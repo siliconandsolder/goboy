@@ -38,7 +38,7 @@ func (p *Player) Start() error {
 		Freq:     AUDIO_FREQ,
 		Format:   sdl.AUDIO_U8,
 		Channels: 2,
-		Samples:  1024,
+		Samples:  AUDIO_FREQ / 60,
 		Callback: sdl.AudioCallback(C.Callback),
 		UserData: unsafe.Pointer(&p.channel),
 	}
@@ -52,6 +52,8 @@ func (p *Player) Start() error {
 }
 
 func (p *Player) Close() {
+	sdl.PauseAudio(true)
+	sdl.CloseAudio()
 	p.pinner.Unpin()
 }
 
