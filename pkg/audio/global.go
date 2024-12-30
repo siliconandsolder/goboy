@@ -1,7 +1,15 @@
 package audio
 
 type GlobalRegister struct {
-	Panning byte // NR51
+	// NR51
+	pulse1Left  bool
+	pulse2Left  bool
+	waveLeft    bool
+	noiseLeft   bool
+	pulse1Right bool
+	pulse2Right bool
+	waveRight   bool
+	noiseRight  bool
 
 	// NR52
 	audioEnabled  bool

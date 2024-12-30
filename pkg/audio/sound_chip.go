@@ -4,7 +4,7 @@ import "github.com/veandco/go-sdl2/sdl"
 
 const LENGTH_TIMER_MAX = 64
 const LENGTH_TIMER_WAVE_MAX = 256
-const CYCLES_PER_SAMPLE = 95
+const CYCLES_PER_SAMPLE = 87
 
 type SoundChip struct {
 	Global GlobalRegister
@@ -47,31 +47,57 @@ func (s *SoundChip) Cycle(cycles byte) {
 		if s.cyclesToSample == 0 {
 			s.cyclesToSample = CYCLES_PER_SAMPLE
 
-			var pulse1Sample byte = 0
-			var pulse2Sample byte = 0
-			var waveSample byte = 0
-			var noiseSample byte = 0
+			var pulse1SampleL byte = 0
+			var pulse2SampleL byte = 0
+			var waveSampleL byte = 0
+			var noiseSampleL byte = 0
 
-			if s.Global.pulse1Enabled {
-				pulse1Sample = s.Pulse1.getSample()
+			var pulse1SampleR byte = 0
+			var pulse2SampleR byte = 0
+			var waveSampleR byte = 0
+			var noiseSampleR byte = 0
+
+			if s.Global.audioEnabled {
+				//if s.Global.pulse1Enabled && s.Pulse1.dacEnabled {
+				//	if s.Global.pulse1Left {
+				//		pulse1SampleL = s.Pulse1.getSample()
+				//	}
+				//	if s.Global.pulse1Right {
+				//		pulse1SampleR = s.Pulse1.getSample()
+				//	}
+				//}
+
+				//if s.Global.pulse2Enabled && s.Pulse2.dacEnabled {
+				//	if s.Global.pulse2Left {
+				//		pulse2SampleL = s.Pulse2.getSample()
+				//	}
+				//	if s.Global.pulse2Right {
+				//		pulse2SampleR = s.Pulse2.getSample()
+				//	}
+				//}
+
+				if s.Global.waveEnabled && s.Wave.dacEnabled {
+					if s.Global.waveLeft {
+						waveSampleL = s.Wave.getSample()
+					}
+					if s.Global.waveRight {
+						waveSampleR = s.Wave.getSample()
+					}
+				}
+
+				//
+				//if s.Global.noiseEnabled {
+				//	noiseSampleL = s.Noise.getSample()
+				//}
 			}
 
-			if s.Global.pulse2Enabled {
-				pulse2Sample = s.Pulse2.getSample()
-			}
-			//
-			if s.Global.waveEnabled {
-				waveSample = s.Wave.getSample()
-			}
-
-			//
-			//if s.Global.noiseEnabled {
-			//	noiseSample = s.Noise.getSample()
-			//}
-
-			mixedSample := pulse1Sample + pulse2Sample + waveSample + noiseSample
-			s.player.SendSample(mixedSample)
-			for len(s.player.channel) > AUDIO_FREQ/30 {
+			mixedSampleLeft := pulse1SampleL + pulse2SampleL + waveSampleL + noiseSampleL
+			mixedSampleRight := pulse1SampleR + pulse2SampleR + waveSampleR + noiseSampleR
+			s.player.SendSample(stereoSample{
+				leftSample:  mixedSampleLeft,
+				rightSample: mixedSampleRight,
+			})
+			for len(s.player.channel) > AUDIO_FREQUENCY/30 { // two buffers' worth
 				sdl.Delay(1)
 			}
 		}
@@ -134,6 +160,8 @@ func (s *SoundChip) GetMasterControl() byte {
 	return retVal
 }
 
+// TODO: incorporate master control and volume
+
 func (s *SoundChip) SetMasterVolume(value byte) {
 	s.Global.vinLeft = value >> 7 & 1
 	s.Global.leftVolume = value >> 4 & 7
@@ -148,6 +176,56 @@ func (s *SoundChip) GetMasterVolume() byte {
 	retVal |= s.Global.leftVolume << 4
 	retVal |= s.Global.vinRight << 3
 	retVal |= s.Global.rightVolume
+
+	return retVal
+}
+
+func (s *SoundChip) SetMasterPanning(value byte) {
+	s.Global.noiseLeft = value>>7&1 == 1
+	s.Global.waveLeft = value>>6&1 == 1
+	s.Global.pulse2Left = value>>5&1 == 1
+	s.Global.pulse1Left = value>>4&1 == 1
+
+	s.Global.noiseRight = value>>3&1 == 1
+	s.Global.waveRight = value>>2&1 == 1
+	s.Global.pulse2Right = value>>1&1 == 1
+	s.Global.pulse1Right = value&1 == 1
+}
+
+func (s *SoundChip) GetMasterPanning() byte {
+	var retVal byte = 0
+
+	if s.Global.noiseLeft {
+		retVal |= 1 << 7
+	}
+
+	if s.Global.waveLeft {
+		retVal |= 1 << 6
+	}
+
+	if s.Global.pulse2Left {
+		retVal |= 1 << 5
+	}
+
+	if s.Global.pulse1Left {
+		retVal |= 1 << 4
+	}
+
+	if s.Global.noiseRight {
+		retVal |= 1 << 3
+	}
+
+	if s.Global.waveRight {
+		retVal |= 1 << 2
+	}
+
+	if s.Global.pulse2Right {
+		retVal |= 1 << 1
+	}
+
+	if s.Global.pulse1Right {
+		retVal |= 1
+	}
 
 	return retVal
 }

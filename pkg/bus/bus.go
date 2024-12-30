@@ -170,7 +170,7 @@ func (bus *Bus) Write(addr uint16, value byte) {
 	case GLOBAL_MASTER_CONTROL:
 		bus.soundChip.SetMasterControl(value)
 	case GLOBAL_SOUND_PAN:
-		bus.soundChip.Global.Panning = value
+		bus.soundChip.SetMasterPanning(value)
 	case GLOBAL_MASTER_VOLUME:
 		bus.soundChip.SetMasterVolume(value)
 	case CHANNEL_ONE_SWEEP:
@@ -260,7 +260,7 @@ func (bus *Bus) Read(addr uint16) byte {
 	case GLOBAL_MASTER_CONTROL:
 		return bus.soundChip.GetMasterControl()
 	case GLOBAL_SOUND_PAN:
-		return bus.soundChip.Global.Panning
+		return bus.soundChip.GetMasterPanning()
 	case GLOBAL_MASTER_VOLUME:
 		return bus.soundChip.GetMasterVolume()
 	case CHANNEL_ONE_SWEEP:

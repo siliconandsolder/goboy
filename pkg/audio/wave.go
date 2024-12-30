@@ -52,6 +52,7 @@ func (w *waveRegister) cycleLengthTimer() bool {
 	return true
 }
 
+// TODO: fix sample gathering
 func (w *waveRegister) getSample() byte {
 	var sample byte = 0
 	if w.sampleIdx&1 == 0 {

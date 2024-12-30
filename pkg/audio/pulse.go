@@ -38,6 +38,8 @@ type pulseRegister struct {
 	shadowSweep   uint16
 	volumeTimer   byte
 	currentVolume byte
+	envEnabled    bool
+	dacEnabled    bool
 }
 
 func (p *pulseRegister) cycleFrequencyTimer() {
@@ -81,7 +83,7 @@ func (p *pulseRegister) cycleSweepTimer() bool {
 			if newPeriod <= 0x7FF && p.sweepStep > 0 {
 				p.periodLow = byte(newPeriod & 0xFF)
 				p.periodHigh = byte((newPeriod >> 8) & 7)
-				p.shadowSweep = uint16(p.periodHigh&7)<<8 | uint16(p.periodLow)
+				p.shadowSweep = newPeriod
 
 				p.pulse1IterateSweep() // overflow check
 			}
@@ -116,11 +118,18 @@ func (p *pulseRegister) cycleVolumeTimer() {
 		if p.volumeTimer == 0 {
 			p.volumeTimer = p.envPace
 
-			if p.envDirection == 1 && p.currentVolume < 0xF {
-				p.currentVolume++
-			} else if p.envDirection == 0 && p.currentVolume > 0 {
-				p.currentVolume--
+			if p.envEnabled && p.envPace > 0 {
+				if p.envDirection == 1 && p.currentVolume < 0xF {
+					p.currentVolume++
+				} else if p.envDirection == 0 && p.currentVolume > 0 {
+					p.currentVolume--
+				}
 			}
+
+			if p.currentVolume == 0 || p.currentVolume == 15 {
+				p.envEnabled = false
+			}
+
 		}
 	}
 }
@@ -144,6 +153,7 @@ func (p *pulseRegister) setVolumeEnvelope(value byte) {
 	p.volume = (value >> 4) & 0xF
 	p.envDirection = (value >> 3) & 1
 	p.envPace = value & 7
+	p.dacEnabled = value&0xF8 != 0
 }
 
 func (p *pulseRegister) setPeriodLow(value byte) {
@@ -170,6 +180,7 @@ func (p *pulseRegister) setPeriodHigh(value byte) bool {
 		}
 		p.shadowSweep = period
 		p.sweepEnabled = p.sweepTimer > 0 || p.sweepStep > 0
+		p.envEnabled = true
 		return true
 	}
 

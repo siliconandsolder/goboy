@@ -1,7 +1,7 @@
 package audio
 
 // typedef unsigned char Uint8;
-// void Callback(void *player, Uint8 *stream, int len);
+// void Callback(void *queue, Uint8 *stream, int len);
 import "C"
 import (
 	"github.com/veandco/go-sdl2/sdl"
@@ -10,18 +10,22 @@ import (
 	"unsafe"
 )
 
-const SAMPLE_RATE = 87
-const AUDIO_FREQ = 48000
+const AUDIO_FREQUENCY = 48000
+
+type stereoSample struct {
+	leftSample  byte
+	rightSample byte
+}
 
 type Player struct {
-	channel     chan byte
+	channel     chan stereoSample
 	numChannels int
 	pinner      *runtime.Pinner
 }
 
 func NewPlayer() *Player {
 	return &Player{
-		channel:     make(chan byte, AUDIO_FREQ),
+		channel:     make(chan stereoSample, AUDIO_FREQUENCY),
 		numChannels: 0,
 		pinner:      new(runtime.Pinner),
 	}
@@ -35,10 +39,10 @@ func (p *Player) Start() error {
 	p.pinner.Pin(&p.channel)
 
 	spec := &sdl.AudioSpec{
-		Freq:     AUDIO_FREQ,
+		Freq:     AUDIO_FREQUENCY,
 		Format:   sdl.AUDIO_U8,
 		Channels: 2,
-		Samples:  AUDIO_FREQ / 60,
+		Samples:  AUDIO_FREQUENCY / 60,
 		Callback: sdl.AudioCallback(C.Callback),
 		UserData: unsafe.Pointer(&p.channel),
 	}
@@ -57,26 +61,26 @@ func (p *Player) Close() {
 	p.pinner.Unpin()
 }
 
-func (p *Player) SendSample(sample byte) {
+func (p *Player) SendSample(sample stereoSample) {
 	p.channel <- sample
 }
 
 //export Callback
-func Callback(player unsafe.Pointer, stream *C.Uint8, length C.int) {
+func Callback(queue unsafe.Pointer, stream *C.Uint8, length C.int) {
 	n := int(length)
 	hdr := reflect.SliceHeader{Data: uintptr(unsafe.Pointer(stream)), Len: n, Cap: n}
 	buf := *(*[]C.Uint8)(unsafe.Pointer(&hdr))
-	channel := *(*chan byte)(player)
+	channel := *(*chan stereoSample)(queue)
 
 	for i := 0; i < n; i += 2 {
-		var output C.Uint8 = 0
+		var output stereoSample
 		select {
 		case sample := <-channel:
-			output = (C.Uint8)(sample)
+			output = sample
 		default:
-			output = 0
+			output = stereoSample{}
 		}
-		buf[i] = output
-		buf[i+1] = output
+		buf[i] = (C.Uint8)(output.leftSample)
+		buf[i+1] = (C.Uint8)(output.rightSample)
 	}
 }
