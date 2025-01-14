@@ -59,7 +59,6 @@ var cmd = &cobra.Command{
 		p := ppu.NewPPU(b)
 
 		var vBuffer []uint32
-		var prevDivTimer byte = 0
 
 		for {
 			cycles, err := c.Cycle()
@@ -68,14 +67,6 @@ var cmd = &cobra.Command{
 			}
 			t.Cycle(cycles)
 			s.Cycle(cycles)
-
-			curDivTimer := b.Read(cpu.DIV_TIMER_ADDRESS)
-			// check for falling edge on bit 5
-			if (prevDivTimer>>5&1) == 1 && (curDivTimer>>5&1) == 0 {
-				s.CycleFrameSequencer()
-			}
-
-			prevDivTimer = curDivTimer
 
 			if vBuffer, err = p.Cycle(cycles); err != nil {
 				panic(err)

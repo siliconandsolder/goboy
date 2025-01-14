@@ -52,7 +52,6 @@ func (w *waveRegister) cycleLengthTimer() bool {
 	return true
 }
 
-// TODO: fix sample gathering
 func (w *waveRegister) getSample() byte {
 	var sample byte = 0
 	if w.sampleIdx&1 == 0 {
@@ -77,18 +76,18 @@ func (w *waveRegister) getDAC() byte {
 
 func (w *waveRegister) setPeriodHigh(value byte) bool {
 	trigger := false
+	w.lengthEnabled = (value>>6)&1 == 1
+	w.periodHigh = value & 7
+
 	if value>>7&1 == 1 {
 		if w.lengthTimer == 0 {
-			w.lengthTimer = LENGTH_TIMER_WAVE_MAX - uint16(w.initLength)
+			w.lengthTimer = LENGTH_TIMER_WAVE_MAX //- uint16(w.initLength)
 		}
 		period := uint16(w.periodHigh)<<8 | uint16(w.periodLow)
 		w.freqTimer = (2048 - period) * 2
 		w.sampleIdx = 0
 		trigger = true
 	}
-
-	w.lengthEnabled = (value>>6)&1 == 1
-	w.periodHigh = value & 3
 
 	return trigger
 }

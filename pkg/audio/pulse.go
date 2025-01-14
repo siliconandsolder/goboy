@@ -56,6 +56,7 @@ func (p *pulseRegister) cycleFrequencyTimer() {
 	}
 }
 
+// TODO: fix the length timer enablement
 func (p *pulseRegister) cycleLengthTimer() bool {
 	if p.lengthEnabled && p.lengthTimer > 0 {
 		p.lengthTimer--
@@ -87,7 +88,7 @@ func (p *pulseRegister) cycleSweepTimer() bool {
 
 				p.pulse1IterateSweep() // overflow check
 			}
-			p.pulse1IterateSweep()
+			//p.pulse1IterateSweep()
 
 			return channelEnabled
 		}

@@ -25,25 +25,24 @@ type noiseRegister struct {
 }
 
 func (n *noiseRegister) cycleFrequencyTimer() {
-	if n.freqTimer > 0 {
-		n.freqTimer--
-		if n.freqTimer == 0 {
-			var divisor byte
-			if n.clockDivider == 0 {
-				divisor = 8
-			} else {
-				divisor = n.clockDivider << 4
-			}
-			n.freqTimer = divisor << n.clockShift
-
-			xor := (n.lfsr & 1) ^ ((n.lfsr & 2) >> 1)
-			n.lfsr = (n.lfsr >> 1) | (xor << 14)
-
-			if n.lfsrWidth == 1 {
-				n.lfsr &= ^uint16(1 << 6)
-				n.lfsr |= xor << 6
-			}
+	if n.freqTimer == 0 {
+		var divisor byte
+		if n.clockDivider == 0 {
+			divisor = 8
+		} else {
+			divisor = n.clockDivider << 4
 		}
+		n.freqTimer = divisor << n.clockShift
+
+		xor := (n.lfsr & 1) ^ ((n.lfsr & 2) >> 1)
+		n.lfsr = (n.lfsr >> 1) | (xor << 14)
+
+		if n.lfsrWidth == 1 {
+			n.lfsr &= ^uint16(1 << 6)
+			n.lfsr |= xor << 6
+		}
+	} else {
+		n.freqTimer--
 	}
 }
 
@@ -94,7 +93,7 @@ func (n *noiseRegister) getVolumeEnvelope() byte {
 }
 
 func (n *noiseRegister) setFreqRandomness(value byte) {
-	n.clockShift = value >> 4 & 0xF
+	n.clockShift = value & 0xF >> 4
 	n.lfsrWidth = value >> 3 & 1
 	n.clockDivider = value & 7
 }
@@ -116,6 +115,8 @@ func (n *noiseRegister) setNoiseControl(value byte) bool {
 			n.lengthTimer = LENGTH_TIMER_MAX - n.initLength
 		}
 		n.lfsr = 0x7FFF
+		n.currentVolume = n.volume
+		n.volumeTimer = n.envPace
 		trigger = true
 	}
 

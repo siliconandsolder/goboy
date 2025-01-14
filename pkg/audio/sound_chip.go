@@ -5,6 +5,7 @@ import "github.com/veandco/go-sdl2/sdl"
 const LENGTH_TIMER_MAX = 64
 const LENGTH_TIMER_WAVE_MAX = 256
 const CYCLES_PER_SAMPLE = 87
+const CYCLE_SEQUENCER_MAX = 8192
 
 type SoundChip struct {
 	Global GlobalRegister
@@ -13,9 +14,10 @@ type SoundChip struct {
 	Wave   waveRegister
 	Noise  noiseRegister
 
-	frameSequencer byte
-	cyclesToSample byte
-	player         *Player
+	frameSequencer    byte
+	cyclesToSequencer uint16
+	cyclesToSample    byte
+	player            *Player
 }
 
 func NewSoundChip(p *Player) *SoundChip {
@@ -28,16 +30,22 @@ func NewSoundChip(p *Player) *SoundChip {
 		Wave: waveRegister{
 			ram: make([]byte, 0x20),
 		},
-		Noise:          noiseRegister{},
-		frameSequencer: 0,
-		cyclesToSample: CYCLES_PER_SAMPLE,
-		player:         p,
+		Noise:             noiseRegister{},
+		frameSequencer:    0,
+		cyclesToSequencer: 0,
+		cyclesToSample:    CYCLES_PER_SAMPLE,
+		player:            p,
 	}
 }
 
 func (s *SoundChip) Cycle(cycles byte) {
 	for i := byte(0); i < cycles; i++ {
 
+		s.cyclesToSequencer++
+		if s.cyclesToSequencer == CYCLE_SEQUENCER_MAX {
+			s.CycleFrameSequencer()
+			s.cyclesToSequencer = 0
+		}
 		s.Pulse1.cycleFrequencyTimer()
 		s.Pulse2.cycleFrequencyTimer()
 		s.Wave.cycleFrequencyTimer()
@@ -58,23 +66,23 @@ func (s *SoundChip) Cycle(cycles byte) {
 			var noiseSampleR byte = 0
 
 			if s.Global.audioEnabled {
-				//if s.Global.pulse1Enabled && s.Pulse1.dacEnabled {
-				//	if s.Global.pulse1Left {
-				//		pulse1SampleL = s.Pulse1.getSample()
-				//	}
-				//	if s.Global.pulse1Right {
-				//		pulse1SampleR = s.Pulse1.getSample()
-				//	}
-				//}
+				if s.Global.pulse1Enabled && s.Pulse1.dacEnabled {
+					if s.Global.pulse1Left {
+						pulse1SampleL = s.Pulse1.getSample()
+					}
+					if s.Global.pulse1Right {
+						pulse1SampleR = s.Pulse1.getSample()
+					}
+				}
 
-				//if s.Global.pulse2Enabled && s.Pulse2.dacEnabled {
-				//	if s.Global.pulse2Left {
-				//		pulse2SampleL = s.Pulse2.getSample()
-				//	}
-				//	if s.Global.pulse2Right {
-				//		pulse2SampleR = s.Pulse2.getSample()
-				//	}
-				//}
+				if s.Global.pulse2Enabled && s.Pulse2.dacEnabled {
+					if s.Global.pulse2Left {
+						pulse2SampleL = s.Pulse2.getSample()
+					}
+					if s.Global.pulse2Right {
+						pulse2SampleR = s.Pulse2.getSample()
+					}
+				}
 
 				if s.Global.waveEnabled && s.Wave.dacEnabled {
 					if s.Global.waveLeft {
@@ -85,10 +93,14 @@ func (s *SoundChip) Cycle(cycles byte) {
 					}
 				}
 
-				//
-				//if s.Global.noiseEnabled {
-				//	noiseSampleL = s.Noise.getSample()
-				//}
+				if s.Global.noiseEnabled {
+					if s.Global.noiseLeft {
+						noiseSampleL = s.Noise.getSample()
+					}
+					if s.Global.noiseRight {
+						noiseSampleR = s.Noise.getSample()
+					}
+				}
 			}
 
 			mixedSampleLeft := pulse1SampleL + pulse2SampleL + waveSampleL + noiseSampleL
@@ -106,10 +118,21 @@ func (s *SoundChip) Cycle(cycles byte) {
 
 func (s *SoundChip) CycleFrameSequencer() {
 	if s.frameSequencer%2 == 0 {
-		s.Global.pulse1Enabled = s.Pulse1.cycleLengthTimer()
-		s.Global.pulse2Enabled = s.Pulse2.cycleLengthTimer()
-		s.Global.waveEnabled = s.Wave.cycleLengthTimer()
-		s.Global.noiseEnabled = s.Noise.cycleLengthTimer()
+		if !s.Pulse1.cycleLengthTimer() { // length timer reached 0
+			s.Global.pulse1Enabled = false
+		}
+
+		if !s.Pulse2.cycleLengthTimer() { // length timer reached 0
+			s.Global.pulse2Enabled = false
+		}
+
+		if !s.Wave.cycleLengthTimer() { // length timer reached 0
+			s.Global.waveEnabled = false
+		}
+
+		if !s.Noise.cycleLengthTimer() { // length timer reached 0
+			s.Global.noiseEnabled = false
+		}
 	}
 
 	if s.frameSequencer == 2 || s.frameSequencer == 6 {
@@ -159,8 +182,6 @@ func (s *SoundChip) GetMasterControl() byte {
 
 	return retVal
 }
-
-// TODO: incorporate master control and volume
 
 func (s *SoundChip) SetMasterVolume(value byte) {
 	s.Global.vinLeft = value >> 7 & 1
@@ -311,6 +332,7 @@ func (s *SoundChip) GetWaveDAC() byte {
 
 func (s *SoundChip) SetWaveLengthTimer(value byte) {
 	s.Wave.initLength = value
+	s.Wave.lengthTimer = LENGTH_TIMER_WAVE_MAX - uint16(value)
 }
 
 func (s *SoundChip) SetWaveOutput(value byte) {
