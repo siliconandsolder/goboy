@@ -59,23 +59,6 @@ func (s *SpriteFetcher) cycle(shouldCycle bool) {
 		s.state = PushToFIFO
 		break
 	case PushToFIFO:
-		// hacky bullshit
-		// clear all
-		//for i := s.fifo.size - 1; i >= 0; i-- {
-		//	if s.fifo.queue[i] == nil { // sanity check
-		//		continue
-		//	}
-		//
-		//	if s.fifo.queue[i].colourNum != 0 {
-		//		break
-		//	}
-		//
-		//	if s.fifo.queue[i].colourNum == 0 {
-		//		s.fifo.queue[i] = nil
-		//		s.fifo.size--
-		//	}
-		//}
-
 		tempFifo := newFIFO(false)
 
 		for i := byte(0); i <= 7; i++ {
@@ -139,6 +122,7 @@ func (s *SpriteFetcher) readTileData(isHigh bool) {
 	}
 }
 
+// hacky bullshit
 func (s *SpriteFetcher) mixFifos(tempFifo *PixelFIFO) {
 	for i := 0; i < MAX_SIZE_FG; i++ {
 		if s.fifo.queue[i] == nil {
