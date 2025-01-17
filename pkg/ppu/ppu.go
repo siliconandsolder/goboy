@@ -48,13 +48,11 @@ type Ppu struct {
 	bufferReady bool
 	pixelIdx    uint16
 
-	dot            uint16
-	pixels         byte
-	bgFetcher      *BgFetcher
-	fgFetcher      *SpriteFetcher
-	fetchingSprite bool
-	shouldCycle    bool
-	bus            *bus.Bus
+	dot         uint16
+	bgFetcher   *BgFetcher
+	fgFetcher   *SpriteFetcher
+	shouldCycle bool
+	bus         *bus.Bus
 }
 
 func NewPPU(bus *bus.Bus) *Ppu {
@@ -78,7 +76,6 @@ func NewPPU(bus *bus.Bus) *Ppu {
 		bufferReady: false,
 		pixelIdx:    0,
 		dot:         0,
-		pixels:      0,
 		bgFetcher:   newBgFetcher(bus, lcdc, scs),
 		fgFetcher:   newSpriteFetcher(bus, lcdc),
 		bus:         bus,
