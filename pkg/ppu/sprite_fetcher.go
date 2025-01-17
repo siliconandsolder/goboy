@@ -75,9 +75,9 @@ func (s *SpriteFetcher) cycle(shouldCycle bool) {
 			priority := s.spriteToFetch.attributes.priority
 			var paletteAddr uint16
 			if palette == 0 {
-				paletteAddr = 0xFF48
+				paletteAddr = SPRITE_DATA_ZERO
 			} else {
-				paletteAddr = 0xFF49
+				paletteAddr = SPRITE_DATA_ONE
 			}
 
 			if err := tempFifo.push(newPixel(colourNum, paletteAddr, priority)); err != nil {

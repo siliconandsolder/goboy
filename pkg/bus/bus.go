@@ -56,7 +56,6 @@ const (
 	HIGH_RAM_START = 0xFF80
 	HIGH_RAM_END   = 0xFFFE
 
-	// TODO: implement PPU registers
 	LCD_CTRL_ADDRESS  = 0xFF40
 	LCD_STAT_ADDRESS  = 0xFF41
 	SCY_ADDRESS       = 0xFF42

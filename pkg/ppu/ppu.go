@@ -99,17 +99,8 @@ func (ppu *Ppu) Cycle(cycles byte) ([]uint32, error) {
 			break // wait for all cycles to complete
 		}
 
-		//if ppu.lcdStatus.lycLYEqual == 1 && ppu.dot == 0 && ppu.lcdStatus.lycStatInterrupt == 1 {
-		//	ppu.bus.Write(bus.INTERRUPT_REQUEST, interrupts.LCDSTAT)
-		//}
-
 		switch ppu.lcdStatus.mode {
 		case OAM_SEARCH:
-			// TODO: Search OAM for OBJs whose Y coordinate overlap this line
-			// for all OAMs, check for y-coord
-			// if match, record in lineSprites
-			// break after 10 or end of loop
-
 			if ppu.dot == MAX_OAM_SEARCH {
 				ppu.lineSprites = make([]*OamObj, 0, MAX_SPRITES_PER_LINE)
 				var spriteSize byte
@@ -153,7 +144,6 @@ func (ppu *Ppu) Cycle(cycles byte) ([]uint32, error) {
 			ppu.bgFetcher.cycle(ppu.shouldCycle)
 			ppu.shouldCycle = !ppu.shouldCycle
 
-			// TODO: sprite overlap, check for transparent pixel (while colour is transparent from bottom of fifo, pop pixels, then push new sprite)
 			if !ppu.bgFetcher.fifo.isEmpty() && ppu.fgFetcher.spriteToFetch == nil {
 				if ppu.x == 0 {
 					for i := byte(0); i < ppu.scs.scx%8; i++ {

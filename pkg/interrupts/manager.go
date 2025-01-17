@@ -1,6 +1,5 @@
 package interrupts
 
-// TODO: vblank is zero, fix flags
 const (
 	VBLANK  byte = 1
 	LCDSTAT byte = 2

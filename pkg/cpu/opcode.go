@@ -381,7 +381,6 @@ func GetOpCode(code byte) (OpCode, error) {
 	case 0x27: // DAA
 		return OpCode{
 			execution: func(c *Cpu) {
-				// TODO: fix DAA
 				corr := int16(c.AF.upper.value)
 				if c.getNFlag() {
 					if c.getHFlag() {

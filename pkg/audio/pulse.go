@@ -56,7 +56,6 @@ func (p *pulseRegister) cycleFrequencyTimer() {
 	}
 }
 
-// TODO: fix the length timer enablement
 func (p *pulseRegister) cycleLengthTimer() bool {
 	if p.lengthEnabled && p.lengthTimer > 0 {
 		p.lengthTimer--
