@@ -79,6 +79,8 @@ type OamObj struct {
 	posY       byte
 	tileNum    byte
 	attributes OamAttributes
+
+	idx byte // used only for sorting sprites on the scanline
 }
 
 func NewOamObj() *OamObj {

@@ -59,8 +59,26 @@ func (s *SpriteFetcher) cycle(shouldCycle bool) {
 		s.state = PushToFIFO
 		break
 	case PushToFIFO:
-		// TODO: figure out why sprites are backwards
-		for i := byte(s.fifo.size); i <= 7; i++ {
+		// hacky bullshit
+		// clear all
+		//for i := s.fifo.size - 1; i >= 0; i-- {
+		//	if s.fifo.queue[i] == nil { // sanity check
+		//		continue
+		//	}
+		//
+		//	if s.fifo.queue[i].colourNum != 0 {
+		//		break
+		//	}
+		//
+		//	if s.fifo.queue[i].colourNum == 0 {
+		//		s.fifo.queue[i] = nil
+		//		s.fifo.size--
+		//	}
+		//}
+
+		tempFifo := newFIFO(false)
+
+		for i := byte(0); i <= 7; i++ {
 			pixelBit := i
 			if s.spriteToFetch.attributes.xFlip == 0 {
 				pixelBit = 7 - pixelBit
@@ -78,11 +96,13 @@ func (s *SpriteFetcher) cycle(shouldCycle bool) {
 			} else {
 				paletteAddr = 0xFF49
 			}
-			err := s.fifo.push(newPixel(colourNum, paletteAddr, priority))
-			if err != nil {
+
+			if err := tempFifo.push(newPixel(colourNum, paletteAddr, priority)); err != nil {
 				panic(err)
 			}
 		}
+
+		s.mixFifos(tempFifo)
 		s.spriteToFetch = nil
 		s.state = ReadTileID
 		break
@@ -116,5 +136,21 @@ func (s *SpriteFetcher) readTileData(isHigh bool) {
 		s.dataHigh = data
 	} else {
 		s.dataLow = data
+	}
+}
+
+func (s *SpriteFetcher) mixFifos(tempFifo *PixelFIFO) {
+	for i := 0; i < MAX_SIZE_FG; i++ {
+		if s.fifo.queue[i] == nil {
+			if err := s.fifo.push(tempFifo.queue[i]); err != nil {
+				panic(err)
+			}
+			continue
+		}
+		if tempFifo.queue[i].colourNum != 0 && s.fifo.queue[i].colourNum == 0 {
+			s.fifo.queue[i].colourNum = tempFifo.queue[i].colourNum
+			s.fifo.queue[i].priority = tempFifo.queue[i].priority
+			s.fifo.queue[i].paletteAddr = tempFifo.queue[i].paletteAddr
+		}
 	}
 }

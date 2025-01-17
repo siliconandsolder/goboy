@@ -118,8 +118,9 @@ func (ppu *Ppu) Cycle(cycles byte) ([]uint32, error) {
 				} else {
 					spriteSize = 16
 				}
-				for _, oam := range ppu.oams {
+				for idx, oam := range ppu.oams {
 					if oam.posY <= (ppu.ly+16) && (ppu.ly+16) < (oam.posY+spriteSize) {
+						oam.idx = byte(idx)
 						ppu.lineSprites = append(ppu.lineSprites, oam)
 					}
 					if len(ppu.lineSprites) == MAX_SPRITES_PER_LINE {
@@ -128,7 +129,12 @@ func (ppu *Ppu) Cycle(cycles byte) ([]uint32, error) {
 				}
 
 				slices.SortStableFunc(ppu.lineSprites, func(a, b *OamObj) int {
-					return cmp.Compare(a.posX, b.posX)
+					xPriority := cmp.Compare(a.posX, b.posX)
+					if xPriority != 0 {
+						return xPriority
+					} else {
+						return cmp.Compare(a.idx, b.idx)
+					}
 				})
 
 				ppu.bgFetcher.reset(ppu.x, ppu.ly)
@@ -138,7 +144,6 @@ func (ppu *Ppu) Cycle(cycles byte) ([]uint32, error) {
 			}
 			break
 		case PIXEL_TRANSFER:
-			// TODO: find a way to tell PPU that sprite has been loaded into FIFO, do not pop bg FIFO until fg FIFO is ready
 			if ppu.fgFetcher.spriteToFetch != nil {
 				ppu.fgFetcher.cycle(ppu.shouldCycle)
 			} else if sprite := ppu.checkForSprite(); sprite != nil {
@@ -146,18 +151,9 @@ func (ppu *Ppu) Cycle(cycles byte) ([]uint32, error) {
 			}
 
 			ppu.bgFetcher.cycle(ppu.shouldCycle)
-			//ppu.bgFetcher.cycle(ppu.shouldCycle)
 			ppu.shouldCycle = !ppu.shouldCycle
 
-			//if !ppu.fetchingSprite {
-			//	for _, sprite := range ppu.lineSprites {
-			//		if sprite.posX == ppu.x {
-			//			ppu.fetchingSprite = true
-			//			ppu.fgFetcher.spriteToFetch = sprite
-			//		}
-			//	}
-			//}
-
+			// TODO: sprite overlap, check for transparent pixel (while colour is transparent from bottom of fifo, pop pixels, then push new sprite)
 			if !ppu.bgFetcher.fifo.isEmpty() && ppu.fgFetcher.spriteToFetch == nil {
 				if ppu.x == 0 {
 					for i := byte(0); i < ppu.scs.scx%8; i++ {
