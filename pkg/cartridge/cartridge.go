@@ -2,12 +2,15 @@ package cartridge
 
 import (
 	"fmt"
+	"github.com/siliconandsolder/go-boy/pkg/cartridge/rtc"
 	"os"
 )
 
 const (
-	ROM_ONLY = 0x00
-	MBC_1    = 0x01
+	ROM_ONLY    = 0x00
+	MBC_1       = 0x01
+	MBC_3_START = 0x0F
+	MBC_3_END   = 0x13
 )
 
 const (
@@ -24,6 +27,7 @@ type Cartridge struct {
 	mbc    MBC
 	rom    []byte
 	ram    []byte
+	state  *rtc.State
 }
 
 func NewCartridge(file string) *Cartridge {
@@ -38,7 +42,7 @@ func NewCartridge(file string) *Cartridge {
 		panic(err)
 	}
 
-	mapper, err := getMBC(header)
+	mapper, state, err := getMBC(header)
 	if err != nil {
 		panic(err)
 	}
@@ -53,23 +57,32 @@ func NewCartridge(file string) *Cartridge {
 		mbc:    mapper,
 		rom:    rom,
 		ram:    ram,
+		state:  state,
 	}
+}
 
+func (c *Cartridge) UpdateCounter(cycles byte) {
+	if c.state != nil {
+		c.state.AddCycles(cycles)
+	}
 }
 
 func (c *Cartridge) Read(addr uint16) byte {
-	realAddr := c.mbc.Read(addr)
-	if addr >= RAM_START && addr <= RAM_END {
-		return c.ram[realAddr]
+	val, isAddr := c.mbc.Read(addr)
+	if isAddr {
+		if addr >= RAM_START && addr <= RAM_END {
+			return c.ram[val]
+		}
+		return c.rom[val]
 	}
 
-	return c.rom[realAddr]
+	return byte(val)
 }
 
 func (c *Cartridge) Write(addr uint16, data byte) {
-	realAddr := c.mbc.Write(addr, data)
-	if addr >= RAM_START && addr <= RAM_END {
-		c.ram[realAddr] = data
+	val, isAddr := c.mbc.Write(addr, data)
+	if isAddr && addr >= RAM_START && addr <= RAM_END {
+		c.ram[val] = data
 	}
 }
 
@@ -85,13 +98,15 @@ func verifyChecksum(verifier byte, verifyBytes []byte) error {
 	return nil
 }
 
-func getMBC(header *Header) (MBC, error) {
-	switch header.CartType {
-	case ROM_ONLY:
-		return &RomOnly{}, nil
-	case MBC_1:
-		return NewMBC1(header.RomSize, header.RamSize), nil
-	default:
-		return nil, fmt.Errorf("cart type %d not yet implemented", header.CartType)
+func getMBC(header *Header) (MBC, *rtc.State, error) {
+	if header.CartType == ROM_ONLY {
+		return &RomOnly{}, nil, nil
+	} else if header.CartType == MBC_1 {
+		return NewMBC1(header.RomSize, header.RamSize), nil, nil
+	} else if header.CartType >= MBC_3_START && header.CartType <= MBC_3_END {
+		rtcState := rtc.NewState()
+		return NewMBC3(header.RomSize, header.RamSize, rtcState), rtcState, nil
 	}
+
+	return nil, nil, fmt.Errorf("cart type %d not yet implemented", header.CartType)
 }

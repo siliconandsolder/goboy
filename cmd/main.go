@@ -50,7 +50,7 @@ var cmd = &cobra.Command{
 		}(player)
 
 		ctrl := controller.NewController()
-		cart := cartridge.NewCartridge("./roms/mario.gb")
+		cart := cartridge.NewCartridge("./roms/pokemon.gb")
 		m := interrupts.NewManager()
 		s := audio.NewSoundChip(player)
 		b := bus.NewBus(cart, m, ctrl, s)
@@ -67,6 +67,7 @@ var cmd = &cobra.Command{
 			}
 			t.Cycle(cycles)
 			s.Cycle(cycles)
+			cart.UpdateCounter(cycles)
 
 			if vBuffer, err = p.Cycle(cycles); err != nil {
 				panic(err)

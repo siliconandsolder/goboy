@@ -47,7 +47,7 @@ type RomInfo struct {
 
 type RamInfo struct {
 	Size     uint32
-	NumBanks uint16
+	NumBanks byte
 }
 
 func NewHeader(data []byte) *Header {

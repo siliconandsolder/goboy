@@ -66,7 +66,7 @@ func NewCpu(bus *bus.Bus, manager *interrupts.Manager, timer *SysTimer) *Cpu {
 		DE:               de,
 		HL:               hl,
 		SP:               0xFFFE,
-		PC:               0x0000,
+		PC:               0x0100,
 		waitCycles:       0,
 		halt:             false,
 		interruptEnabled: false,

@@ -9,8 +9,10 @@ import (
 )
 
 const (
-	CART_START = 0x0000
-	CART_END   = 0x7FFF
+	CART_ROM_START = 0x0000
+	CART_ROM_END   = 0x7FFF
+	CART_RAM_START = 0xA000
+	CART_RAM_END   = 0xBFFF
 
 	VRAM_START = 0x8000
 	VRAM_END   = 0x9FFF
@@ -210,7 +212,7 @@ func (bus *Bus) Write(addr uint16, value byte) {
 		bus.soundChip.SetNoiseControl(value)
 	}
 
-	if addr <= CART_END {
+	if addr <= CART_ROM_END || (addr >= CART_RAM_START && addr <= CART_RAM_END) { // TODO: write to ram
 		bus.cart.Write(addr, value)
 	} else if addr >= VRAM_START && addr <= VRAM_END && bus.vramAccessible {
 		bus.videoRam[addr-VRAM_START] = value
@@ -290,7 +292,7 @@ func (bus *Bus) Read(addr uint16) byte {
 		return bus.soundChip.GetNoiseControl()
 	}
 
-	if addr <= CART_END {
+	if addr <= CART_ROM_END || (addr >= CART_RAM_START && addr <= CART_RAM_END) { // TODO: read from ram
 		return bus.cart.Read(addr)
 	} else if addr >= VRAM_START && addr <= VRAM_END {
 		if bus.vramAccessible {
