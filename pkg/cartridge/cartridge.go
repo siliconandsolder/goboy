@@ -3,7 +3,6 @@ package cartridge
 import (
 	"fmt"
 	"github.com/siliconandsolder/go-boy/pkg/cartridge/rtc"
-	"os"
 )
 
 const (
@@ -30,15 +29,10 @@ type Cartridge struct {
 	state  *rtc.State
 }
 
-func NewCartridge(file string) *Cartridge {
-	data, err := os.ReadFile(file)
-	if err != nil {
-		panic(err) // no point in continuing
-	}
+func NewCartridge(file []byte) *Cartridge {
+	header := NewHeader(file[HEADER_START:])
 
-	header := NewHeader(data[HEADER_START:])
-
-	if err := verifyChecksum(header.HeaderChecksum, data[CHECKSUM_LOWER_BOUND:CHECKSUM_UPPER_BOUND]); err != nil {
+	if err := verifyChecksum(header.HeaderChecksum, file[CHECKSUM_LOWER_BOUND:CHECKSUM_UPPER_BOUND]); err != nil {
 		panic(err)
 	}
 
@@ -50,7 +44,7 @@ func NewCartridge(file string) *Cartridge {
 	rom := make([]byte, header.RomSize.Size)
 	ram := make([]byte, header.RamSize.Size)
 
-	rom = data
+	rom = file
 
 	return &Cartridge{
 		header: header,

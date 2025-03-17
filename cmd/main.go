@@ -11,19 +11,40 @@ import (
 	"github.com/siliconandsolder/go-boy/pkg/ppu"
 	"github.com/spf13/cobra"
 	"github.com/veandco/go-sdl2/sdl"
+	"os"
 )
 
-var cmd = &cobra.Command{
-	Use:   "test",
-	Short: "my emulator",
+const (
+	defaultScale            = 4
+	gbWidth, gbHeight int32 = 160, 144
+	scaleFName              = "scale"
+	romFName                = "rom"
+)
+
+var romName string
+var scale int32
+
+var rootCmd = &cobra.Command{
+	Use:   "goboy",
+	Short: "a gameboy emulator written in Golang",
 
 	Run: func(cmd *cobra.Command, args []string) {
-		var winWidth, winHeight int32 = 640, 576
-		var gbWidth, gbHeight int32 = 160, 144
+		fileName, _ := cmd.Flags().GetString(romFName)
+		if fileName == "" {
+			panic("no rom :(") // TODO: splash screen
+		}
+
+		scale, _ := cmd.Flags().GetInt32(scaleFName)
+		var winWidth, winHeight int32 = gbWidth * scale, gbHeight * scale
+
+		fileData, err := os.ReadFile(fileName)
+		if err != nil {
+			panic(err) // no point in continuing
+		}
+
 		var window *sdl.Window
 		var renderer *sdl.Renderer
 		var texture *sdl.Texture
-		var err error
 
 		window, err = sdl.CreateWindow("GOBOY", sdl.WINDOWPOS_UNDEFINED, sdl.WINDOWPOS_UNDEFINED,
 			winWidth, winHeight, sdl.WINDOW_SHOWN)
@@ -50,7 +71,7 @@ var cmd = &cobra.Command{
 		}(player)
 
 		ctrl := controller.NewController()
-		cart := cartridge.NewCartridge("./roms/pokemon.gb")
+		cart := cartridge.NewCartridge(fileData)
 		m := interrupts.NewManager()
 		s := audio.NewSoundChip(player)
 		b := bus.NewBus(cart, m, ctrl, s)
@@ -107,7 +128,9 @@ var cmd = &cobra.Command{
 }
 
 func main() {
-	err := cmd.Execute()
+	rootCmd.Flags().Int32Var(&scale, scaleFName, defaultScale, "scale the window size as a multiple of the default gameboy resolution")
+	rootCmd.Flags().StringVar(&romName, romFName, "", "specify a .gb file")
+	err := rootCmd.Execute()
 	if err != nil {
 		panic(err)
 	}
