@@ -81,65 +81,6 @@ func (c *Controller) CheckForInputs() bool {
 	return false
 }
 
-func (c *Controller) CheckJoypad() bool {
-	for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
-		switch t := event.(type) {
-		case *sdl.KeyboardEvent:
-			keyCode := t.Keysym.Sym
-			if t.State == sdl.PRESSED {
-				switch keyCode {
-				case sdl.K_RIGHT:
-					c.inputs[RIGHT] = true
-				case sdl.K_LEFT:
-					c.inputs[LEFT] = true
-				case sdl.K_UP:
-					c.inputs[UP] = true
-				case sdl.K_DOWN:
-					c.inputs[DOWN] = true
-				case sdl.K_z:
-					c.inputs[A_BUTTON] = true
-				case sdl.K_x:
-					c.inputs[B_BUTTON] = true
-				case sdl.K_RSHIFT:
-					c.inputs[SELECT] = true
-				case sdl.K_RETURN:
-					c.inputs[START] = true
-				}
-			} else {
-				switch keyCode {
-				case sdl.K_RIGHT:
-					c.inputs[RIGHT] = false
-				case sdl.K_LEFT:
-					c.inputs[LEFT] = false
-				case sdl.K_UP:
-					c.inputs[UP] = false
-				case sdl.K_DOWN:
-					c.inputs[DOWN] = false
-				case sdl.K_z:
-					c.inputs[A_BUTTON] = false
-				case sdl.K_x:
-					c.inputs[B_BUTTON] = false
-				case sdl.K_RSHIFT:
-					c.inputs[SELECT] = false
-				case sdl.K_RETURN:
-					c.inputs[START] = false
-				}
-			}
-
-		default:
-			break
-		}
-	}
-
-	for _, val := range c.inputs {
-		if val {
-			return true
-		}
-	}
-
-	return false
-}
-
 func (c *Controller) SetButtonSelectors(val byte) {
 	c.selectDPad = false
 	c.selectButtons = false

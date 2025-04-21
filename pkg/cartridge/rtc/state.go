@@ -130,7 +130,7 @@ func (s *State) GetSnapshot() *StateSnapshot {
 		LatchedHours:    s.Latched.H,
 		LatchedDaysLow:  s.Latched.DL,
 		LatchedDaysHigh: s.Latched.DH,
-		Timestamp:       time.Now().Unix(),
+		Timestamp:       s.lastTime.Unix(),
 	}
 }
 

@@ -124,10 +124,6 @@ var rootCmd = &cobra.Command{
 				}
 				renderer.Present()
 
-				//if ctrl.CheckJoypad() {
-				//	b.ToggleInterrupt(interrupts.JOYPAD)
-				//}
-
 				for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
 					switch t := event.(type) {
 					case *sdl.KeyboardEvent:
@@ -142,6 +138,10 @@ var rootCmd = &cobra.Command{
 					default:
 						break
 					}
+				}
+
+				if ctrl.CheckForInputs() {
+					b.ToggleInterrupt(interrupts.JOYPAD)
 				}
 			}
 		}
