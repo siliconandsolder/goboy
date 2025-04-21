@@ -35,18 +35,20 @@ var rootCmd = &cobra.Command{
 		}
 
 		scale, _ := cmd.Flags().GetInt32(scaleFName)
-		var winWidth, winHeight int32 = gbWidth * scale, gbHeight * scale
+		var winWidth, winHeight = gbWidth * scale, gbHeight * scale
 
 		fileData, err := os.ReadFile(fileName)
 		if err != nil {
 			panic(err) // no point in continuing
 		}
 
+		cart := cartridge.NewCartridge(fileData)
+
 		var window *sdl.Window
 		var renderer *sdl.Renderer
 		var texture *sdl.Texture
 
-		window, err = sdl.CreateWindow("GOBOY", sdl.WINDOWPOS_UNDEFINED, sdl.WINDOWPOS_UNDEFINED,
+		window, err = sdl.CreateWindow(fmt.Sprintf("GOBOY - %s", cart.Title), sdl.WINDOWPOS_UNDEFINED, sdl.WINDOWPOS_UNDEFINED,
 			winWidth, winHeight, sdl.WINDOW_SHOWN)
 		defer window.Destroy()
 
@@ -71,7 +73,6 @@ var rootCmd = &cobra.Command{
 		}(player)
 
 		ctrl := controller.NewController()
-		cart := cartridge.NewCartridge(fileData)
 		m := interrupts.NewManager()
 		s := audio.NewSoundChip(player)
 		b := bus.NewBus(cart, m, ctrl, s)
@@ -79,9 +80,13 @@ var rootCmd = &cobra.Command{
 		c := cpu.NewCpu(b, m, t)
 		p := ppu.NewPPU(b)
 
+		cart.LoadRAMFromFile()
+		defer cart.SaveRAMToFile()
+
 		var vBuffer []uint32
 
-		for {
+		running := true
+		for running {
 			cycles, err := c.Cycle()
 			if err != nil {
 				panic(err)
@@ -97,7 +102,7 @@ var rootCmd = &cobra.Command{
 				if err != nil {
 					panic(err)
 				}
-				//fmt.Sprintf("pixels: %v\n", pixels)
+
 				for i := 0; i < len(vBuffer); i++ {
 					red := byte(vBuffer[i] >> 24)
 					green := byte(vBuffer[i] >> 16 & 0xFF)
@@ -119,8 +124,24 @@ var rootCmd = &cobra.Command{
 				}
 				renderer.Present()
 
-				if ctrl.CheckJoypad() {
-					b.ToggleInterrupt(interrupts.JOYPAD)
+				//if ctrl.CheckJoypad() {
+				//	b.ToggleInterrupt(interrupts.JOYPAD)
+				//}
+
+				for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
+					switch t := event.(type) {
+					case *sdl.KeyboardEvent:
+						keyCode := t.Keysym.Sym
+						if keyCode == sdl.K_ESCAPE {
+							running = false
+						} else {
+							ctrl.CheckJoypadEvent(keyCode, t.State)
+						}
+					case *sdl.QuitEvent:
+						running = false
+					default:
+						break
+					}
 				}
 			}
 		}

@@ -12,6 +12,20 @@ type State struct {
 	lastTime  time.Time
 }
 
+type StateSnapshot struct {
+	Seconds         byte
+	Minutes         byte
+	Hours           byte
+	DaysLow         byte
+	DaysHigh        byte
+	LatchedSeconds  byte
+	LatchedMinutes  byte
+	LatchedHours    byte
+	LatchedDaysLow  byte
+	LatchedDaysHigh byte
+	Timestamp       int64
+}
+
 func NewState() *State {
 	return &State{
 		Unlatched: &registers{
@@ -102,4 +116,34 @@ func (s *State) Latch() {
 	s.Latched.DL = s.Unlatched.DL
 	s.Latched.DH = s.Unlatched.DH
 	s.IsLatched = true
+}
+
+func (s *State) GetSnapshot() *StateSnapshot {
+	return &StateSnapshot{
+		Seconds:         s.Unlatched.S,
+		Minutes:         s.Unlatched.M,
+		Hours:           s.Unlatched.H,
+		DaysLow:         s.Unlatched.DL,
+		DaysHigh:        s.Unlatched.DH,
+		LatchedSeconds:  s.Latched.S,
+		LatchedMinutes:  s.Latched.M,
+		LatchedHours:    s.Latched.H,
+		LatchedDaysLow:  s.Latched.DL,
+		LatchedDaysHigh: s.Latched.DH,
+		Timestamp:       time.Now().Unix(),
+	}
+}
+
+func (s *State) FromSnapshot(snapshot *StateSnapshot) {
+	s.Unlatched.S = snapshot.Seconds
+	s.Unlatched.M = snapshot.Minutes
+	s.Unlatched.H = snapshot.Hours
+	s.Unlatched.DL = snapshot.DaysLow
+	s.Unlatched.DH = snapshot.DaysHigh
+	s.Latched.S = snapshot.LatchedSeconds
+	s.Latched.M = snapshot.LatchedMinutes
+	s.Latched.H = snapshot.LatchedHours
+	s.Latched.DL = snapshot.LatchedDaysLow
+	s.Latched.DH = snapshot.LatchedDaysHigh
+	s.lastTime = time.Unix(snapshot.Timestamp, 0)
 }

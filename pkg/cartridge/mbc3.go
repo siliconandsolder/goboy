@@ -5,39 +5,34 @@ import (
 )
 
 const (
-	ROM_BANK_ADDR    = 0x3FFF
 	RAM_BANK_ADDR    = 0x5FFF
 	LATCH_CLOCK_ADDR = 0x7FFF
 	RTC_REG_ADDR     = 0xBFFF
 )
 
 type MBC3 struct {
-	ramEnabled     bool
-	romBank        byte
-	lastRomBank    byte
-	hasRam         bool
-	ramBank        byte
-	lastRamBank    byte
-	bankSelectMode byte
-	rtcActive      bool
-	regToRead      byte
-	prevWrite      byte
+	ramEnabled  bool
+	romBank     byte
+	lastRomBank byte
+	ramBank     byte
+	lastRamBank byte
+	rtcActive   bool
+	regToRead   byte
+	prevWrite   byte
 
 	rtcState *rtc.State
 }
 
 func NewMBC3(romInfo RomInfo, ramInfo RamInfo, rtcState *rtc.State) *MBC3 {
 	return &MBC3{
-		ramEnabled:     ramInfo.Size > 0,
-		romBank:        0,
-		lastRomBank:    byte(romInfo.NumBanks - 1), // max number of banks is 128
-		hasRam:         false,
-		ramBank:        0,
-		lastRamBank:    ramInfo.NumBanks - 1,
-		bankSelectMode: 0,
-		rtcActive:      false,
-		regToRead:      0,
-		rtcState:       rtcState,
+		ramEnabled:  ramInfo.Size > 0,
+		romBank:     0,
+		lastRomBank: byte(romInfo.NumBanks - 1), // max number of banks is 128
+		ramBank:     0,
+		lastRamBank: ramInfo.NumBanks - 1,
+		rtcActive:   false,
+		regToRead:   0,
+		rtcState:    rtcState,
 	}
 }
 

@@ -18,6 +18,7 @@
 # vendor/
 
 roms/
+saves/
 dump.txt
 .idea/
 

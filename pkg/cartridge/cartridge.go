@@ -1,8 +1,12 @@
 package cartridge
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/siliconandsolder/go-boy/pkg/cartridge/rtc"
+	"os"
+	"slices"
+	"strings"
 )
 
 const (
@@ -21,12 +25,21 @@ const (
 	RAM_END   = 0xBFFF
 )
 
+var batteryCartridges = []byte{0x03, 0x06, 0x09, 0x0D, 0x0F, 0x10, 0x13, 0x1B, 0x1E, 0x22, 0xFF}
+
 type Cartridge struct {
-	header *Header
-	mbc    MBC
-	rom    []byte
-	ram    []byte
-	state  *rtc.State
+	Title      string
+	header     *Header
+	mbc        MBC
+	rom        []byte
+	ram        []byte
+	state      *rtc.State
+	hasBattery bool
+}
+
+type SaveFile struct {
+	Sram        []byte
+	RtcSnapshot *rtc.StateSnapshot
 }
 
 func NewCartridge(file []byte) *Cartridge {
@@ -47,11 +60,13 @@ func NewCartridge(file []byte) *Cartridge {
 	rom = file
 
 	return &Cartridge{
-		header: header,
-		mbc:    mapper,
-		rom:    rom,
-		ram:    ram,
-		state:  state,
+		Title:      header.Title,
+		header:     header,
+		mbc:        mapper,
+		rom:        rom,
+		ram:        ram,
+		state:      state,
+		hasBattery: slices.Contains(batteryCartridges, header.CartType),
 	}
 }
 
@@ -77,6 +92,70 @@ func (c *Cartridge) Write(addr uint16, data byte) {
 	val, isAddr := c.mbc.Write(addr, data)
 	if isAddr && addr >= RAM_START && addr <= RAM_END {
 		c.ram[val] = data
+	}
+}
+
+func (c *Cartridge) SaveRAMToFile() {
+	if c.hasBattery {
+
+		sram := make([]byte, c.header.RamSize.Size)
+		copy(sram, c.ram)
+
+		var snapshot *rtc.StateSnapshot = nil
+		if c.state != nil {
+			snapshot = c.state.GetSnapshot()
+		}
+
+		save := SaveFile{
+			Sram:        sram,
+			RtcSnapshot: snapshot,
+		}
+
+		saveJson, err := json.Marshal(save)
+		if err != nil {
+			panic(err)
+		}
+
+		saveTitle := fmt.Sprintf("%s.sav", strings.ToLower(strings.ReplaceAll(c.Title, " ", "_")))
+		if _, err := os.Stat("saves"); os.IsNotExist(err) {
+			err = os.Mkdir("saves", 0777)
+			if err != nil {
+				panic(err)
+			}
+		}
+
+		err = os.WriteFile("saves/"+saveTitle, saveJson, 0777)
+		if err != nil {
+			panic(err)
+		}
+	}
+}
+
+func (c *Cartridge) LoadRAMFromFile() {
+	if c.hasBattery {
+		saveTitle := fmt.Sprintf("%s.sav", strings.ToLower(strings.ReplaceAll(c.Title, " ", "_")))
+		saveData, err := os.ReadFile("saves/" + saveTitle)
+		if err != nil {
+			if os.IsNotExist(err) {
+				fmt.Printf("no save file for: %s\n", c.Title)
+				return
+			} else {
+				panic(err)
+			}
+		}
+
+		save := SaveFile{}
+		err = json.Unmarshal(saveData, &save)
+		if err != nil {
+			fmt.Printf("could not read save: %v\n", err)
+			return
+		}
+
+		copy(c.ram, save.Sram)
+
+		if save.RtcSnapshot != nil {
+			c.state.FromSnapshot(save.RtcSnapshot)
+		}
 	}
 }
 
