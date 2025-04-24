@@ -1,5 +1,7 @@
 package cartridge
 
+import "strconv"
+
 const (
 	LOGO            = 0x04
 	TITLE           = 0x34
@@ -52,8 +54,8 @@ type RamInfo struct {
 
 func NewHeader(data []byte) *Header {
 	return &Header{
-		Title:          string(data[TITLE:MAN_CODE]),
-		ManCode:        string(data[MAN_CODE:CGB_FLAG]),
+		Title:          sliceToString(data[TITLE:MAN_CODE]),
+		ManCode:        sliceToString(data[MAN_CODE:CGB_FLAG]),
 		CGBFlag:        data[CGB_FLAG] == CGB_ONLY_CODE,
 		LicenceCode:    0,
 		SGBFlag:        data[SGB_CODE] == 0x3,
@@ -66,6 +68,16 @@ func NewHeader(data []byte) *Header {
 		HeaderChecksum: data[HEADER_CHECKSUM],
 		GlobalChecksum: 0,
 	}
+}
+
+func sliceToString(data []byte) string {
+	stringVal := ""
+	for _, val := range data {
+		if val != 0 {
+			stringVal += strconv.Itoa(int(val))
+		}
+	}
+	return stringVal
 }
 
 func getRomData(romValue byte) RomInfo {

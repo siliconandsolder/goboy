@@ -11,7 +11,8 @@ import (
 
 const (
 	ROM_ONLY    = 0x00
-	MBC_1       = 0x01
+	MBC_1_START = 0x01
+	MBC_1_END   = 0x03
 	MBC_3_START = 0x0F
 	MBC_3_END   = 0x13
 )
@@ -97,6 +98,9 @@ func (c *Cartridge) Write(addr uint16, data byte) {
 
 func (c *Cartridge) SaveRAMToFile() {
 	if c.hasBattery {
+		if c.Title == "" {
+			return
+		}
 
 		sram := make([]byte, c.header.RamSize.Size)
 		copy(sram, c.ram)
@@ -116,7 +120,6 @@ func (c *Cartridge) SaveRAMToFile() {
 			panic(err)
 		}
 
-		saveTitle := fmt.Sprintf("%s.sav", strings.ToLower(strings.ReplaceAll(c.Title, " ", "_")))
 		if _, err := os.Stat("saves"); os.IsNotExist(err) {
 			err = os.Mkdir("saves", 0777)
 			if err != nil {
@@ -124,6 +127,7 @@ func (c *Cartridge) SaveRAMToFile() {
 			}
 		}
 
+		saveTitle := fmt.Sprintf("%s.sav", strings.ToLower(strings.ReplaceAll(c.Title, " ", "_")))
 		err = os.WriteFile("saves/"+saveTitle, saveJson, 0777)
 		if err != nil {
 			panic(err)
@@ -133,6 +137,10 @@ func (c *Cartridge) SaveRAMToFile() {
 
 func (c *Cartridge) LoadRAMFromFile() {
 	if c.hasBattery {
+		if c.Title == "" {
+			return
+		}
+
 		saveTitle := fmt.Sprintf("%s.sav", strings.ToLower(strings.ReplaceAll(c.Title, " ", "_")))
 		saveData, err := os.ReadFile("saves/" + saveTitle)
 		if err != nil {
@@ -174,7 +182,7 @@ func verifyChecksum(verifier byte, verifyBytes []byte) error {
 func getMBC(header *Header) (MBC, *rtc.State, error) {
 	if header.CartType == ROM_ONLY {
 		return &RomOnly{}, nil, nil
-	} else if header.CartType == MBC_1 {
+	} else if header.CartType >= MBC_1_START && header.CartType <= MBC_1_END {
 		return NewMBC1(header.RomSize, header.RamSize), nil, nil
 	} else if header.CartType >= MBC_3_START && header.CartType <= MBC_3_END {
 		rtcState := rtc.NewState()
