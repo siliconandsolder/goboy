@@ -66,7 +66,7 @@ func (s *SoundChip) Cycle(cycles byte) {
 			var noiseSampleR byte = 0
 
 			if s.Global.audioEnabled {
-				if s.Global.pulse1Enabled && s.Pulse1.dacEnabled {
+				if s.Pulse1.enabled && s.Pulse1.dacEnabled {
 					if s.Global.pulse1Left {
 						pulse1SampleL = s.Pulse1.getSample()
 					}
@@ -75,7 +75,7 @@ func (s *SoundChip) Cycle(cycles byte) {
 					}
 				}
 
-				if s.Global.pulse2Enabled && s.Pulse2.dacEnabled {
+				if s.Pulse2.enabled && s.Pulse2.dacEnabled {
 					if s.Global.pulse2Left {
 						pulse2SampleL = s.Pulse2.getSample()
 					}
@@ -84,7 +84,7 @@ func (s *SoundChip) Cycle(cycles byte) {
 					}
 				}
 
-				if s.Global.waveEnabled && s.Wave.dacEnabled {
+				if s.Wave.enabled && s.Wave.dacEnabled {
 					if s.Global.waveLeft {
 						waveSampleL = s.Wave.getSample()
 					}
@@ -93,7 +93,7 @@ func (s *SoundChip) Cycle(cycles byte) {
 					}
 				}
 
-				if s.Global.noiseEnabled {
+				if s.Noise.enabled {
 					if s.Global.noiseLeft {
 						noiseSampleL = s.Noise.getSample()
 					}
@@ -118,25 +118,14 @@ func (s *SoundChip) Cycle(cycles byte) {
 
 func (s *SoundChip) CycleFrameSequencer() {
 	if s.frameSequencer%2 == 0 {
-		if !s.Pulse1.cycleLengthTimer() { // length timer reached 0
-			s.Global.pulse1Enabled = false
-		}
-
-		if !s.Pulse2.cycleLengthTimer() { // length timer reached 0
-			s.Global.pulse2Enabled = false
-		}
-
-		if !s.Wave.cycleLengthTimer() { // length timer reached 0
-			s.Global.waveEnabled = false
-		}
-
-		if !s.Noise.cycleLengthTimer() { // length timer reached 0
-			s.Global.noiseEnabled = false
-		}
+		s.Pulse1.cycleLengthTimer()
+		s.Pulse2.cycleLengthTimer()
+		s.Wave.cycleLengthTimer()
+		s.Noise.cycleLengthTimer()
 	}
 
 	if s.frameSequencer == 2 || s.frameSequencer == 6 {
-		s.Global.pulse1Enabled = s.Pulse1.cycleSweepTimer()
+		s.Pulse1.cycleSweepTimer()
 	}
 
 	if s.frameSequencer == 7 {
@@ -150,12 +139,30 @@ func (s *SoundChip) CycleFrameSequencer() {
 	s.frameSequencer &= 7
 }
 
+func (s *SoundChip) IsOn() bool {
+	return s.Global.audioEnabled
+}
+
 func (s *SoundChip) SetMasterControl(value byte) {
-	s.Global.audioEnabled = value>>7&1 == 1
-	s.Global.noiseEnabled = value>>3&1 == 1
-	s.Global.waveEnabled = value>>2&1 == 1
-	s.Global.pulse2Enabled = value>>1&1 == 1
-	s.Global.pulse1Enabled = value&1 == 1
+	audioEnabled := value>>7&1 == 1
+	if audioEnabled && !s.Global.audioEnabled {
+		s.frameSequencer = 0
+	}
+
+	s.Global.audioEnabled = audioEnabled
+
+	if !s.Global.audioEnabled {
+		s.Pulse1.enabled = false
+		s.Pulse2.enabled = false
+		s.Wave.enabled = false
+		s.Noise.enabled = false
+
+		s.Pulse1.clear()
+		s.Pulse2.clear()
+		s.Wave.clear()
+		s.Noise.clear()
+		s.Global.clear()
+	}
 }
 
 func (s *SoundChip) GetMasterControl() byte {
@@ -164,30 +171,30 @@ func (s *SoundChip) GetMasterControl() byte {
 		retVal |= 1 << 7
 	}
 
-	if s.Global.noiseEnabled {
+	if s.Noise.enabled {
 		retVal |= 1 << 3
 	}
 
-	if s.Global.waveEnabled {
+	if s.Wave.enabled {
 		retVal |= 1 << 2
 	}
 
-	if s.Global.pulse2Enabled {
+	if s.Pulse2.enabled {
 		retVal |= 1 << 1
 	}
 
-	if s.Global.pulse1Enabled {
+	if s.Pulse1.enabled {
 		retVal |= 1
 	}
 
-	return retVal
+	return retVal | registerMasks[nr52]
 }
 
 func (s *SoundChip) SetMasterVolume(value byte) {
 	s.Global.vinLeft = value >> 7 & 1
 	s.Global.leftVolume = value >> 4 & 7
 	s.Global.vinRight = value >> 3 & 1
-	s.Global.leftVolume = value & 7
+	s.Global.rightVolume = value & 7
 }
 
 func (s *SoundChip) GetMasterVolume() byte {
@@ -198,7 +205,7 @@ func (s *SoundChip) GetMasterVolume() byte {
 	retVal |= s.Global.vinRight << 3
 	retVal |= s.Global.rightVolume
 
-	return retVal
+	return retVal | registerMasks[nr50]
 }
 
 func (s *SoundChip) SetMasterPanning(value byte) {
@@ -248,7 +255,7 @@ func (s *SoundChip) GetMasterPanning() byte {
 		retVal |= 1
 	}
 
-	return retVal
+	return retVal | registerMasks[nr51]
 }
 
 func (s *SoundChip) SetPulse1Sweep(value byte) {
@@ -256,7 +263,7 @@ func (s *SoundChip) SetPulse1Sweep(value byte) {
 }
 
 func (s *SoundChip) GetPulse1Sweep() byte {
-	return s.Pulse1.getSweep()
+	return s.Pulse1.getSweep() | registerMasks[nr10]
 }
 
 func (s *SoundChip) SetPulse1LengthDuty(value byte) {
@@ -264,7 +271,7 @@ func (s *SoundChip) SetPulse1LengthDuty(value byte) {
 }
 
 func (s *SoundChip) GetPulse1LengthDuty() byte {
-	return s.Pulse1.getLengthDuty()
+	return s.Pulse1.getLengthDuty() | registerMasks[nr11]
 }
 
 func (s *SoundChip) SetPulse1VolumeEnvelope(value byte) {
@@ -272,7 +279,7 @@ func (s *SoundChip) SetPulse1VolumeEnvelope(value byte) {
 }
 
 func (s *SoundChip) GetPulse1VolumeEnvelope() byte {
-	return s.Pulse1.getVolumeEnvelope()
+	return s.Pulse1.getVolumeEnvelope() | registerMasks[nr12]
 }
 
 func (s *SoundChip) SetPulse1PeriodLow(value byte) {
@@ -280,16 +287,11 @@ func (s *SoundChip) SetPulse1PeriodLow(value byte) {
 }
 
 func (s *SoundChip) SetPulse1PeriodHigh(value byte) {
-	if s.Pulse1.setPeriodHigh(value) {
-		s.Global.pulse1Enabled = true
-		if s.Pulse1.sweepStep > 0 {
-			_, s.Global.pulse1Enabled = s.Pulse1.pulse1IterateSweep()
-		}
-	}
+	s.Pulse1.setPeriodHigh(value, s.frameSequencer%2 == 0)
 }
 
 func (s *SoundChip) GetPulse1PeriodHigh() byte {
-	return s.Pulse1.getPeriodHigh()
+	return s.Pulse1.getPeriodHigh() | registerMasks[nr14]
 }
 
 func (s *SoundChip) SetPulse2LengthDuty(value byte) {
@@ -297,7 +299,7 @@ func (s *SoundChip) SetPulse2LengthDuty(value byte) {
 }
 
 func (s *SoundChip) GetPulse2LengthDuty() byte {
-	return s.Pulse2.getLengthDuty()
+	return s.Pulse2.getLengthDuty() | registerMasks[nr21]
 }
 
 func (s *SoundChip) SetPulse2VolumeEnvelope(value byte) {
@@ -305,7 +307,7 @@ func (s *SoundChip) SetPulse2VolumeEnvelope(value byte) {
 }
 
 func (s *SoundChip) GetPulse2VolumeEnvelope() byte {
-	return s.Pulse2.getVolumeEnvelope()
+	return s.Pulse2.getVolumeEnvelope() | registerMasks[nr22]
 }
 
 func (s *SoundChip) SetPulse2PeriodLow(value byte) {
@@ -313,21 +315,22 @@ func (s *SoundChip) SetPulse2PeriodLow(value byte) {
 }
 
 func (s *SoundChip) SetPulse2PeriodHigh(value byte) {
-	if s.Pulse2.setPeriodHigh(value) {
-		s.Global.pulse2Enabled = true
-	}
+	s.Pulse2.setPeriodHigh(value, s.frameSequencer%2 == 0)
 }
 
 func (s *SoundChip) GetPulse2PeriodHigh() byte {
-	return s.Pulse2.getPeriodHigh()
+	return s.Pulse2.getPeriodHigh() | registerMasks[nr24]
 }
 
 func (s *SoundChip) SetWaveDAC(value byte) {
 	s.Wave.dacEnabled = (value>>7)&1 == 1
+	if !s.Wave.dacEnabled {
+		s.Wave.enabled = false
+	}
 }
 
 func (s *SoundChip) GetWaveDAC() byte {
-	return s.Wave.getDAC()
+	return s.Wave.getDAC() | registerMasks[nr30]
 }
 
 func (s *SoundChip) SetWaveLengthTimer(value byte) {
@@ -340,7 +343,7 @@ func (s *SoundChip) SetWaveOutput(value byte) {
 }
 
 func (s *SoundChip) GetWaveOutput() byte {
-	return s.Wave.output << 5
+	return (s.Wave.output << 5) | registerMasks[nr32]
 }
 
 func (s *SoundChip) SetWavePeriodLow(value byte) {
@@ -348,13 +351,11 @@ func (s *SoundChip) SetWavePeriodLow(value byte) {
 }
 
 func (s *SoundChip) SetWavePeriodHigh(value byte) {
-	if s.Wave.setPeriodHigh(value) {
-		s.Global.waveEnabled = true
-	}
+	s.Wave.setPeriodHigh(value)
 }
 
 func (s *SoundChip) GetWaveLengthEnable() byte {
-	return s.Wave.getLengthEnabled()
+	return s.Wave.getLengthEnabled() | registerMasks[nr34]
 }
 
 func (s *SoundChip) SetWaveRAM(addr uint16, value byte) {
@@ -367,6 +368,7 @@ func (s *SoundChip) GetWaveRAM(addr uint16) byte {
 
 func (s *SoundChip) SetNoiseLengthTimer(value byte) {
 	s.Noise.initLength = value & 0x3F
+	s.Noise.lengthTimer = LENGTH_TIMER_MAX - s.Noise.initLength
 }
 
 func (s *SoundChip) SetNoiseVolumeEnvelope(value byte) {
@@ -374,7 +376,7 @@ func (s *SoundChip) SetNoiseVolumeEnvelope(value byte) {
 }
 
 func (s *SoundChip) GetNoiseVolumeEnvelope() byte {
-	return s.Noise.getVolumeEnvelope()
+	return s.Noise.getVolumeEnvelope() | registerMasks[nr42]
 }
 
 func (s *SoundChip) SetNoiseFreqRandomness(value byte) {
@@ -382,15 +384,13 @@ func (s *SoundChip) SetNoiseFreqRandomness(value byte) {
 }
 
 func (s *SoundChip) GetNoiseFreqRandomness() byte {
-	return s.Noise.getFreqRandomness()
+	return s.Noise.getFreqRandomness() | registerMasks[nr43]
 }
 
 func (s *SoundChip) SetNoiseControl(value byte) {
-	if s.Noise.setNoiseControl(value) {
-		s.Global.noiseEnabled = true
-	}
+	s.Noise.setNoiseControl(value)
 }
 
 func (s *SoundChip) GetNoiseControl() byte {
-	return s.Noise.getNoiseControl()
+	return s.Noise.getNoiseControl() | registerMasks[nr44]
 }

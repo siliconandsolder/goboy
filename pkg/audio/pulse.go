@@ -8,6 +8,8 @@ var pulseDutyTable = [4][8]byte{
 }
 
 type pulseRegister struct {
+	enabled bool
+
 	// NR10 - Channel 1 only
 	sweepPace      byte
 	sweepDirection byte
@@ -29,17 +31,18 @@ type pulseRegister struct {
 	periodHigh    byte
 	lengthEnabled bool
 
-	isChannel1    bool
-	freqTimer     uint16
-	wavePos       byte
-	lengthTimer   byte
-	sweepTimer    byte
-	sweepEnabled  bool
-	shadowSweep   uint16
-	volumeTimer   byte
-	currentVolume byte
-	envEnabled    bool
-	dacEnabled    bool
+	isChannel1      bool
+	freqTimer       uint16
+	wavePos         byte
+	lengthTimer     byte
+	sweepTimer      byte
+	sweepEnabled    bool
+	shadowSweep     uint16
+	sweepCalculated bool
+	volumeTimer     byte
+	currentVolume   byte
+	envEnabled      bool
+	dacEnabled      bool
 }
 
 func (p *pulseRegister) cycleFrequencyTimer() {
@@ -56,18 +59,16 @@ func (p *pulseRegister) cycleFrequencyTimer() {
 	}
 }
 
-func (p *pulseRegister) cycleLengthTimer() bool {
+func (p *pulseRegister) cycleLengthTimer() {
 	if p.lengthEnabled && p.lengthTimer > 0 {
 		p.lengthTimer--
 		if p.lengthTimer == 0 {
-			return false
+			p.enabled = false
 		}
 	}
-
-	return true
 }
 
-func (p *pulseRegister) cycleSweepTimer() bool {
+func (p *pulseRegister) cycleSweepTimer() {
 	if p.sweepTimer > 0 {
 		p.sweepTimer--
 	}
@@ -78,7 +79,7 @@ func (p *pulseRegister) cycleSweepTimer() bool {
 		}
 
 		if p.sweepEnabled && p.sweepPace > 0 {
-			newPeriod, channelEnabled := p.pulse1IterateSweep()
+			newPeriod := p.pulse1IterateSweep()
 
 			if newPeriod <= 0x7FF && p.sweepStep > 0 {
 				p.periodLow = byte(newPeriod & 0xFF)
@@ -87,16 +88,11 @@ func (p *pulseRegister) cycleSweepTimer() bool {
 
 				p.pulse1IterateSweep() // overflow check
 			}
-			//p.pulse1IterateSweep()
-
-			return channelEnabled
 		}
 	}
-
-	return true
 }
 
-func (p *pulseRegister) pulse1IterateSweep() (uint16, bool) {
+func (p *pulseRegister) pulse1IterateSweep() uint16 {
 	newPeriod := p.shadowSweep >> p.sweepStep
 
 	if p.sweepDirection == 0 {
@@ -106,10 +102,16 @@ func (p *pulseRegister) pulse1IterateSweep() (uint16, bool) {
 	}
 
 	if newPeriod > 0x7FF {
-		return newPeriod, false
+		p.enabled = false
 	}
 
-	return newPeriod, true
+	// Clearing the sweep negate mode bit in NR10 after at least one sweep calculation has been made using
+	// the negate mode since the last trigger causes the channel to be immediately disabled
+	if p.sweepDirection == 1 {
+		p.sweepCalculated = true
+	}
+
+	return newPeriod
 }
 
 func (p *pulseRegister) cycleVolumeTimer() {
@@ -139,6 +141,10 @@ func (p *pulseRegister) getSample() byte {
 }
 
 func (p *pulseRegister) setSweep(value byte) {
+	if p.sweepDirection == 1 && (value>>3)&1 == 0 && p.sweepCalculated {
+		p.enabled = false
+	}
+
 	p.sweepPace = (value >> 4) & 7
 	p.sweepDirection = (value >> 3) & 1
 	p.sweepStep = value & 7
@@ -147,6 +153,7 @@ func (p *pulseRegister) setSweep(value byte) {
 func (p *pulseRegister) setLengthDuty(value byte) {
 	p.duty = (value >> 6) & 3
 	p.initLength = value & 0x3F
+	p.lengthTimer = LENGTH_TIMER_MAX - p.initLength
 }
 
 func (p *pulseRegister) setVolumeEnvelope(value byte) {
@@ -154,19 +161,28 @@ func (p *pulseRegister) setVolumeEnvelope(value byte) {
 	p.envDirection = (value >> 3) & 1
 	p.envPace = value & 7
 	p.dacEnabled = value&0xF8 != 0
+	if !p.dacEnabled {
+		p.enabled = false
+	}
 }
 
 func (p *pulseRegister) setPeriodLow(value byte) {
 	p.periodLow = value
 }
 
-func (p *pulseRegister) setPeriodHigh(value byte) bool {
-	p.lengthEnabled = (value>>6)&1 == 1
+func (p *pulseRegister) setPeriodHigh(value byte, isCycleLengthTimerStep bool) {
 	p.periodHigh = value & 7
 
 	if value&0x80 == 0x80 {
+		if p.dacEnabled {
+			p.enabled = true
+		}
 		if p.lengthTimer == 0 {
-			p.lengthTimer = LENGTH_TIMER_MAX - p.initLength
+			if p.lengthEnabled && !isCycleLengthTimerStep {
+				p.lengthTimer = LENGTH_TIMER_MAX - 1
+			} else {
+				p.lengthTimer = LENGTH_TIMER_MAX
+			}
 		}
 		p.currentVolume = p.volume
 		p.volumeTimer = p.envPace
@@ -174,17 +190,28 @@ func (p *pulseRegister) setPeriodHigh(value byte) bool {
 		period := uint16(p.periodHigh&7)<<8 | uint16(p.periodLow)
 		p.freqTimer = (2048 - period) * 4
 
+		p.sweepCalculated = false
 		p.sweepTimer = p.sweepPace
 		if p.sweepTimer == 0 {
 			p.sweepTimer = 8
 		}
 		p.shadowSweep = period
-		p.sweepEnabled = p.sweepTimer > 0 || p.sweepStep > 0
+		p.sweepEnabled = p.sweepPace > 0 || p.sweepStep > 0
+		if p.sweepStep > 0 {
+			p.pulse1IterateSweep()
+		}
 		p.envEnabled = true
-		return true
 	}
 
-	return false
+	if value&0x40 == 0x40 && !p.lengthEnabled && !isCycleLengthTimerStep {
+		if p.lengthTimer > 0 {
+			p.lengthTimer--
+			if p.lengthTimer == 0 {
+				p.enabled = false
+			}
+		}
+	}
+	p.lengthEnabled = value&0x40 == 0x40
 }
 
 func (p *pulseRegister) getSweep() byte {
@@ -224,4 +251,28 @@ func (p *pulseRegister) getPeriodHigh() byte {
 	}
 
 	return retVal
+}
+
+func (p *pulseRegister) clear() {
+	p.sweepPace = 0
+	p.sweepDirection = 0
+	p.sweepStep = 0
+	p.duty = 0
+	p.initLength = 0
+	p.volume = 0
+	p.envDirection = 0
+	p.envPace = 0
+	p.periodLow = 0
+	p.periodHigh = 0
+	p.lengthEnabled = false
+	p.freqTimer = 0
+	p.wavePos = 0
+	p.lengthTimer = 0
+	p.sweepTimer = 0
+	p.sweepEnabled = false
+	p.shadowSweep = 0
+	p.volumeTimer = 0
+	p.currentVolume = 0
+	p.envEnabled = false
+	p.dacEnabled = false
 }

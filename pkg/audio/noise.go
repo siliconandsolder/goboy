@@ -1,6 +1,8 @@
 package audio
 
 type noiseRegister struct {
+	enabled bool
+
 	// NR41
 	initLength byte
 
@@ -8,6 +10,7 @@ type noiseRegister struct {
 	volume       byte
 	envDirection byte
 	envPace      byte
+	dacEnabled   bool
 
 	// NR43
 	clockShift   byte
@@ -46,15 +49,13 @@ func (n *noiseRegister) cycleFrequencyTimer() {
 	}
 }
 
-func (n *noiseRegister) cycleLengthTimer() bool {
+func (n *noiseRegister) cycleLengthTimer() {
 	if n.lengthEnabled && n.lengthTimer > 0 {
 		n.lengthTimer--
 		if n.lengthTimer == 0 {
-			return false
+			n.enabled = false
 		}
 	}
-
-	return true
 }
 
 func (n *noiseRegister) cycleVolumeTimer() {
@@ -80,6 +81,10 @@ func (n *noiseRegister) setVolumeEnvelope(value byte) {
 	n.volume = value >> 4 & 0xF
 	n.envDirection = value >> 3 & 1
 	n.envPace = value & 7
+	n.dacEnabled = value&0xF8 != 0
+	if !n.dacEnabled {
+		n.enabled = false
+	}
 }
 
 func (n *noiseRegister) getVolumeEnvelope() byte {
@@ -93,7 +98,7 @@ func (n *noiseRegister) getVolumeEnvelope() byte {
 }
 
 func (n *noiseRegister) setFreqRandomness(value byte) {
-	n.clockShift = value & 0xF >> 4
+	n.clockShift = value >> 4 & 0xF
 	n.lfsrWidth = value >> 3 & 1
 	n.clockDivider = value & 7
 }
@@ -108,20 +113,20 @@ func (n *noiseRegister) getFreqRandomness() byte {
 	return retVal
 }
 
-func (n *noiseRegister) setNoiseControl(value byte) bool {
-	trigger := false
+func (n *noiseRegister) setNoiseControl(value byte) {
 	if value>>7&1 == 1 {
 		if n.lengthTimer == 0 {
-			n.lengthTimer = LENGTH_TIMER_MAX - n.initLength
+			n.lengthTimer = LENGTH_TIMER_MAX
 		}
 		n.lfsr = 0x7FFF
 		n.currentVolume = n.volume
 		n.volumeTimer = n.envPace
-		trigger = true
+		if n.dacEnabled {
+			n.enabled = true
+		}
 	}
 
 	n.lengthEnabled = value>>6&1 == 1
-	return trigger
 }
 
 func (n *noiseRegister) getNoiseControl() byte {
@@ -130,4 +135,20 @@ func (n *noiseRegister) getNoiseControl() byte {
 	} else {
 		return 0
 	}
+}
+
+func (n *noiseRegister) clear() {
+	n.initLength = 0
+	n.volume = 0
+	n.envDirection = 0
+	n.envPace = 0
+	n.clockShift = 0
+	n.lfsrWidth = 0
+	n.clockDivider = 0
+	n.lengthEnabled = false
+	n.freqTimer = 0
+	n.lfsr = 0
+	n.lengthTimer = 0
+	n.volumeTimer = 0
+	n.currentVolume = 0
 }

@@ -5,6 +5,8 @@ var waveVolume = [4]byte{
 }
 
 type waveRegister struct {
+	enabled bool
+
 	// NR30
 	dacEnabled bool
 
@@ -41,15 +43,13 @@ func (w *waveRegister) cycleFrequencyTimer() {
 	}
 }
 
-func (w *waveRegister) cycleLengthTimer() bool {
+func (w *waveRegister) cycleLengthTimer() {
 	if w.lengthEnabled && w.lengthTimer > 0 {
 		w.lengthTimer--
 		if w.lengthTimer == 0 {
-			return false
+			w.enabled = false
 		}
 	}
-
-	return true
 }
 
 func (w *waveRegister) getSample() byte {
@@ -74,8 +74,7 @@ func (w *waveRegister) getDAC() byte {
 	return retVal
 }
 
-func (w *waveRegister) setPeriodHigh(value byte) bool {
-	trigger := false
+func (w *waveRegister) setPeriodHigh(value byte) {
 	w.lengthEnabled = (value>>6)&1 == 1
 	w.periodHigh = value & 7
 
@@ -86,10 +85,10 @@ func (w *waveRegister) setPeriodHigh(value byte) bool {
 		period := uint16(w.periodHigh)<<8 | uint16(w.periodLow)
 		w.freqTimer = (2048 - period) * 2
 		w.sampleIdx = 0
-		trigger = true
+		if w.dacEnabled {
+			w.enabled = true
+		}
 	}
-
-	return trigger
 }
 
 func (w *waveRegister) getLengthEnabled() byte {
@@ -98,4 +97,16 @@ func (w *waveRegister) getLengthEnabled() byte {
 	} else {
 		return 0
 	}
+}
+
+func (w *waveRegister) clear() {
+	w.dacEnabled = false
+	w.initLength = 0
+	w.output = 0
+	w.periodLow = 0
+	w.periodHigh = 0
+	w.lengthEnabled = false
+	w.freqTimer = 0
+	w.sampleIdx = 0
+	w.lengthTimer = 0
 }

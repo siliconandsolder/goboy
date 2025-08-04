@@ -170,46 +170,51 @@ func (bus *Bus) Write(addr uint16, value byte) {
 		bus.wx = value
 	case GLOBAL_MASTER_CONTROL:
 		bus.soundChip.SetMasterControl(value)
-	case GLOBAL_SOUND_PAN:
-		bus.soundChip.SetMasterPanning(value)
-	case GLOBAL_MASTER_VOLUME:
-		bus.soundChip.SetMasterVolume(value)
-	case CHANNEL_ONE_SWEEP:
-		bus.soundChip.SetPulse1Sweep(value)
-	case CHANNEL_ONE_LENGTH:
-		bus.soundChip.SetPulse1LengthDuty(value)
-	case CHANNEL_ONE_VOLUME:
-		bus.soundChip.SetPulse1VolumeEnvelope(value)
-	case CHANNEL_ONE_PERIOD_LOW:
-		bus.soundChip.SetPulse1PeriodLow(value)
-	case CHANNEL_ONE_PERIOD_HIGH:
-		bus.soundChip.SetPulse1PeriodHigh(value)
-	case CHANNEL_TWO_LENGTH:
-		bus.soundChip.SetPulse2LengthDuty(value)
-	case CHANNEL_TWO_VOLUME:
-		bus.soundChip.SetPulse2VolumeEnvelope(value)
-	case CHANNEL_TWO_PERIOD_LOW:
-		bus.soundChip.SetPulse2PeriodLow(value)
-	case CHANNEL_TWO_PERIOD_HIGH:
-		bus.soundChip.SetPulse2PeriodHigh(value)
-	case CHANNEL_THREE_DAC:
-		bus.soundChip.SetWaveDAC(value)
-	case CHANNEL_THREE_LENGTH:
-		bus.soundChip.SetWaveLengthTimer(value)
-	case CHANNEL_THREE_OUTPUT:
-		bus.soundChip.SetWaveOutput(value)
-	case CHANNEL_THREE_PERIOD_LOW:
-		bus.soundChip.SetWavePeriodLow(value)
-	case CHANNEL_THREE_PERIOD_HIGH:
-		bus.soundChip.SetWavePeriodHigh(value)
-	case CHANNEL_FOUR_LENGTH:
-		bus.soundChip.SetNoiseLengthTimer(value)
-	case CHANNEL_FOUR_VOLUME:
-		bus.soundChip.SetNoiseVolumeEnvelope(value)
-	case CHANNEL_FOUR_FREQ:
-		bus.soundChip.SetNoiseFreqRandomness(value)
-	case CHANNEL_FOUR_CONTROL:
-		bus.soundChip.SetNoiseControl(value)
+	}
+
+	if bus.soundChip.IsOn() {
+		switch addr {
+		case GLOBAL_SOUND_PAN:
+			bus.soundChip.SetMasterPanning(value)
+		case GLOBAL_MASTER_VOLUME:
+			bus.soundChip.SetMasterVolume(value)
+		case CHANNEL_ONE_SWEEP:
+			bus.soundChip.SetPulse1Sweep(value)
+		case CHANNEL_ONE_LENGTH:
+			bus.soundChip.SetPulse1LengthDuty(value)
+		case CHANNEL_ONE_VOLUME:
+			bus.soundChip.SetPulse1VolumeEnvelope(value)
+		case CHANNEL_ONE_PERIOD_LOW:
+			bus.soundChip.SetPulse1PeriodLow(value)
+		case CHANNEL_ONE_PERIOD_HIGH:
+			bus.soundChip.SetPulse1PeriodHigh(value)
+		case CHANNEL_TWO_LENGTH:
+			bus.soundChip.SetPulse2LengthDuty(value)
+		case CHANNEL_TWO_VOLUME:
+			bus.soundChip.SetPulse2VolumeEnvelope(value)
+		case CHANNEL_TWO_PERIOD_LOW:
+			bus.soundChip.SetPulse2PeriodLow(value)
+		case CHANNEL_TWO_PERIOD_HIGH:
+			bus.soundChip.SetPulse2PeriodHigh(value)
+		case CHANNEL_THREE_DAC:
+			bus.soundChip.SetWaveDAC(value)
+		case CHANNEL_THREE_LENGTH:
+			bus.soundChip.SetWaveLengthTimer(value)
+		case CHANNEL_THREE_OUTPUT:
+			bus.soundChip.SetWaveOutput(value)
+		case CHANNEL_THREE_PERIOD_LOW:
+			bus.soundChip.SetWavePeriodLow(value)
+		case CHANNEL_THREE_PERIOD_HIGH:
+			bus.soundChip.SetWavePeriodHigh(value)
+		case CHANNEL_FOUR_LENGTH:
+			bus.soundChip.SetNoiseLengthTimer(value)
+		case CHANNEL_FOUR_VOLUME:
+			bus.soundChip.SetNoiseVolumeEnvelope(value)
+		case CHANNEL_FOUR_FREQ:
+			bus.soundChip.SetNoiseFreqRandomness(value)
+		case CHANNEL_FOUR_CONTROL:
+			bus.soundChip.SetNoiseControl(value)
+		}
 	}
 
 	if addr <= CART_ROM_END || (addr >= CART_RAM_START && addr <= CART_RAM_END) { // TODO: write to ram
@@ -262,7 +267,7 @@ func (bus *Bus) Read(addr uint16) byte {
 		return bus.soundChip.GetMasterControl()
 	case GLOBAL_SOUND_PAN:
 		return bus.soundChip.GetMasterPanning()
-	case GLOBAL_MASTER_VOLUME:
+	case GLOBAL_MASTER_VOLUME: // here be trouble
 		return bus.soundChip.GetMasterVolume()
 	case CHANNEL_ONE_SWEEP:
 		return bus.soundChip.GetPulse1Sweep()
@@ -314,7 +319,7 @@ func (bus *Bus) Read(addr uint16) byte {
 		return bus.soundChip.GetWaveRAM(addr - CHANNEL_THREE_WAVE_START)
 	}
 
-	return 0
+	return 0xFF
 }
 
 func (bus *Bus) PpuReadVram(addr uint16) byte {
