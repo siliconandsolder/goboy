@@ -1,7 +1,5 @@
 package cartridge
 
-import "strconv"
-
 const (
 	LOGO            = 0x04
 	TITLE           = 0x34
@@ -74,7 +72,7 @@ func sliceToString(data []byte) string {
 	stringVal := ""
 	for _, val := range data {
 		if val != 0 {
-			stringVal += strconv.Itoa(int(val))
+			stringVal += string(rune(val))
 		}
 	}
 	return stringVal
