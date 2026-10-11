@@ -5,7 +5,7 @@ import "github.com/veandco/go-sdl2/sdl"
 const LENGTH_TIMER_MAX = 64
 const LENGTH_TIMER_WAVE_MAX = 256
 const CYCLES_PER_SAMPLE = 87
-const CYCLE_SEQUENCER_MAX = 8192
+const CYCLES_PER_SEQUENCER = 8192
 
 type SoundChip struct {
 	Global GlobalRegister
@@ -42,7 +42,7 @@ func (s *SoundChip) Cycle(cycles byte) {
 	for i := byte(0); i < cycles; i++ {
 
 		s.cyclesToSequencer++
-		if s.cyclesToSequencer == CYCLE_SEQUENCER_MAX {
+		if s.cyclesToSequencer == CYCLES_PER_SEQUENCER {
 			s.CycleFrameSequencer()
 			s.cyclesToSequencer = 0
 		}
