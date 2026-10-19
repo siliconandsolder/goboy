@@ -71,6 +71,18 @@ func (c *Controller) CheckJoypadEvent(keyCode sdl.Keycode, state uint8) {
 	}
 }
 
+func (c *Controller) SetKeyDown(keyCode int) {
+	if keyCode >= RIGHT && keyCode <= START {
+		c.inputs[keyCode] = true
+	}
+}
+
+func (c *Controller) SetKeyUp(keyCode int) {
+	if keyCode >= RIGHT && keyCode <= START {
+		c.inputs[keyCode] = false
+	}
+}
+
 func (c *Controller) CheckForInputs() bool {
 	for _, val := range c.inputs {
 		if val {

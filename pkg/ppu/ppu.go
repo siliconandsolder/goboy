@@ -2,9 +2,10 @@ package ppu
 
 import (
 	"cmp"
+	"slices"
+
 	"github.com/siliconandsolder/go-boy/pkg/bus"
 	"github.com/siliconandsolder/go-boy/pkg/interrupts"
-	"slices"
 )
 
 const (
@@ -24,6 +25,8 @@ const (
 	BUFFER_SIZE          = 23040
 	MAX_OAMS             = 40
 	MAX_SPRITES_PER_LINE = 10
+
+	gbWidth, gbHeight uint32 = 160, 144
 )
 
 type FetcherState byte
@@ -44,9 +47,9 @@ type Ppu struct {
 	x           byte
 	oams        []*OamObj
 	lineSprites []*OamObj
-	pixelBuffer []uint32
+	pixelBuffer [][]uint32
 	bufferReady bool
-	pixelIdx    uint16
+	pixelIdx    uint32
 
 	dot         uint16
 	bgFetcher   *BgFetcher
@@ -63,6 +66,11 @@ func NewPPU(bus *bus.Bus) *Ppu {
 		oamSlice[i] = NewOamObj()
 	}
 
+	buffer := make([][]uint32, gbHeight)
+	for i := range buffer {
+		buffer[i] = make([]uint32, gbWidth)
+	}
+
 	return &Ppu{
 		lcdControl:  lcdc,
 		lcdStatus:   NewLcdStatus(),
@@ -72,7 +80,7 @@ func NewPPU(bus *bus.Bus) *Ppu {
 		x:           0,
 		oams:        oamSlice,
 		lineSprites: make([]*OamObj, 0, MAX_SPRITES_PER_LINE),
-		pixelBuffer: make([]uint32, BUFFER_SIZE),
+		pixelBuffer: buffer,
 		bufferReady: false,
 		pixelIdx:    0,
 		dot:         0,
@@ -82,7 +90,7 @@ func NewPPU(bus *bus.Bus) *Ppu {
 	}
 }
 
-func (ppu *Ppu) Cycle(cycles byte) ([]uint32, error) {
+func (ppu *Ppu) Cycle(cycles byte) ([][]uint32, error) {
 
 	ppu.readRegisters()
 	for i := byte(0); i < cycles; i++ {
@@ -158,22 +166,23 @@ func (ppu *Ppu) Cycle(cycles byte) ([]uint32, error) {
 						fgPixel.colourNum = 0
 					}
 
+					var colour byte
 					if fgPixel.colourNum == 0 || (fgPixel.priority == 1 && bgPixel.colourNum != 0) {
-						colour := (ppu.bus.Read(bgPixel.paletteAddr) & (0x3 << (bgPixel.colourNum * 2))) >> (bgPixel.colourNum * 2)
-						ppu.pixelBuffer[ppu.pixelIdx] = getColour(colour)
-						ppu.pixelIdx++
+						colour = (ppu.bus.Read(bgPixel.paletteAddr) & (0x3 << (bgPixel.colourNum * 2))) >> (bgPixel.colourNum * 2)
 					} else {
-						colour := (ppu.bus.Read(fgPixel.paletteAddr) & (0x3 << (fgPixel.colourNum * 2))) >> (fgPixel.colourNum * 2)
-						ppu.pixelBuffer[ppu.pixelIdx] = getColour(colour)
-						ppu.pixelIdx++
+						colour = (ppu.bus.Read(fgPixel.paletteAddr) & (0x3 << (fgPixel.colourNum * 2))) >> (fgPixel.colourNum * 2)
 					}
+
+					ppu.pixelBuffer[ppu.ly][ppu.x] = getColour(colour)
+					ppu.pixelIdx++
 				} else {
 					pixel := ppu.bgFetcher.fifo.pop()
 					if ppu.lcdControl.bgWindowEnabled == 0 {
 						pixel.colourNum = 0
 					}
 					colour := (ppu.bus.Read(pixel.paletteAddr) & (0x3 << (pixel.colourNum * 2))) >> (pixel.colourNum * 2)
-					ppu.pixelBuffer[ppu.pixelIdx] = getColour(colour)
+
+					ppu.pixelBuffer[ppu.ly][ppu.x] = getColour(colour)
 					ppu.pixelIdx++
 				}
 

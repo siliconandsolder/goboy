@@ -1,7 +1,14 @@
 package main
 
 import (
-	"fmt"
+	"image"
+	"image/color"
+	"os"
+
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/canvas"
+	"fyne.io/fyne/v2/driver/desktop"
 	"github.com/siliconandsolder/go-boy/pkg/audio"
 	"github.com/siliconandsolder/go-boy/pkg/bus"
 	"github.com/siliconandsolder/go-boy/pkg/cartridge"
@@ -10,19 +17,17 @@ import (
 	"github.com/siliconandsolder/go-boy/pkg/interrupts"
 	"github.com/siliconandsolder/go-boy/pkg/ppu"
 	"github.com/spf13/cobra"
-	"github.com/veandco/go-sdl2/sdl"
-	"os"
 )
 
 const (
-	defaultScale            = 4
-	gbWidth, gbHeight int32 = 160, 144
-	scaleFName              = "scale"
-	romFName                = "rom"
+	defaultScale             = 4
+	gbWidth, gbHeight uint32 = 160, 144
+	scaleFName               = "scale"
+	romFName                 = "rom"
 )
 
 var romName string
-var scale int32
+var scale uint32
 
 var rootCmd = &cobra.Command{
 	Use:   "goboy",
@@ -34,8 +39,11 @@ var rootCmd = &cobra.Command{
 			panic("no rom :(") // TODO: splash screen
 		}
 
-		scale, _ := cmd.Flags().GetInt32(scaleFName)
-		var winWidth, winHeight = gbWidth * scale, gbHeight * scale
+		var winWidth, winHeight = float32(gbWidth * scale), float32(gbHeight * scale)
+		vBuffer := make([][]uint32, gbHeight)
+		for i := range vBuffer {
+			vBuffer[i] = make([]uint32, gbWidth)
+		}
 
 		fileData, err := os.ReadFile(fileName)
 		if err != nil {
@@ -44,25 +52,32 @@ var rootCmd = &cobra.Command{
 
 		cart := cartridge.NewCartridge(fileData)
 
-		var window *sdl.Window
-		var renderer *sdl.Renderer
-		var texture *sdl.Texture
+		myApp := app.New()
+		myWindow := myApp.NewWindow("GOBOY - " + cart.Title)
 
-		window, err = sdl.CreateWindow(fmt.Sprintf("GOBOY - %s", cart.Title), sdl.WINDOWPOS_UNDEFINED, sdl.WINDOWPOS_UNDEFINED,
-			winWidth, winHeight, sdl.WINDOW_SHOWN)
-		defer window.Destroy()
+		raster := canvas.NewRaster(func(w, h int) image.Image {
+			img := image.NewRGBA(image.Rect(0, 0, int(gbWidth), int(gbHeight)))
+			for y, scanLine := range vBuffer {
+				for x, pixel := range scanLine {
+					red := uint8(pixel >> 24)
+					green := uint8(pixel >> 16 & 0xFF)
+					blue := uint8(pixel >> 8 & 0xFF)
 
-		renderer, err = sdl.CreateRenderer(window, -1, sdl.RENDERER_ACCELERATED)
-		if err != nil {
-			panic(fmt.Sprintf("Failed to create renderer: %s\n", err))
-		}
-		defer renderer.Destroy()
+					img.Set(x, y, color.RGBA{R: red, G: green, B: blue, A: 0xff})
+				}
+			}
 
-		texture, err = renderer.CreateTexture(sdl.PIXELFORMAT_RGBA8888, sdl.TEXTUREACCESS_STREAMING, gbWidth, gbHeight)
-		if err != nil {
-			panic(err)
-		}
-		defer texture.Destroy()
+			return img
+		})
+
+		raster.Resize(fyne.NewSize(winWidth, winHeight))
+		raster.SetMinSize(fyne.NewSize(winWidth, winHeight))
+		raster.ScaleMode = canvas.ImageScalePixels
+
+		myWindow.SetContent(raster)
+		myWindow.Resize(raster.Size())
+		myWindow.CenterOnScreen()
+		myWindow.SetFixedSize(true)
 
 		player := audio.NewPlayer()
 		if err := player.Start(); err != nil {
@@ -83,73 +98,93 @@ var rootCmd = &cobra.Command{
 		cart.LoadRAMFromFile()
 		defer cart.SaveRAMToFile()
 
-		var vBuffer []uint32
-
 		running := true
-		for running {
-			cycles, err := c.Cycle()
-			if err != nil {
-				panic(err)
-			}
-			t.Cycle(cycles)
-			s.Cycle(cycles)
-			cart.UpdateCounter(cycles)
+		paused := false
 
-			if vBuffer, err = p.Cycle(cycles); err != nil {
-				panic(err)
-			} else if vBuffer != nil {
-				pixels, _, err := texture.Lock(nil)
+		var deskCanvas desktop.Canvas
+		if desk, ok := myWindow.Canvas().(desktop.Canvas); ok {
+			deskCanvas = desk
+		} else {
+			panic("Canvas does not implement desktop.Canvas")
+		}
+
+		deskCanvas.SetOnKeyUp(func(event *fyne.KeyEvent) {
+			switch event.Name {
+			case fyne.KeyRight:
+				ctrl.SetKeyUp(controller.RIGHT)
+			case fyne.KeyLeft:
+				ctrl.SetKeyUp(controller.LEFT)
+			case fyne.KeyUp:
+				ctrl.SetKeyUp(controller.UP)
+			case fyne.KeyDown:
+				ctrl.SetKeyUp(controller.DOWN)
+			case fyne.KeyZ:
+				ctrl.SetKeyUp(controller.A_BUTTON)
+			case fyne.KeyX:
+				ctrl.SetKeyUp(controller.B_BUTTON)
+			case fyne.KeySpace:
+				ctrl.SetKeyUp(controller.SELECT)
+			case fyne.KeyReturn:
+				ctrl.SetKeyUp(controller.START)
+			}
+		})
+		deskCanvas.SetOnKeyDown(func(event *fyne.KeyEvent) {
+			if event.Name == fyne.KeyEscape {
+				running = false
+				myApp.Quit()
+			}
+
+			switch event.Name {
+			case fyne.KeyRight:
+				ctrl.SetKeyDown(controller.RIGHT)
+			case fyne.KeyLeft:
+				ctrl.SetKeyDown(controller.LEFT)
+			case fyne.KeyUp:
+				ctrl.SetKeyDown(controller.UP)
+			case fyne.KeyDown:
+				ctrl.SetKeyDown(controller.DOWN)
+			case fyne.KeyZ:
+				ctrl.SetKeyDown(controller.A_BUTTON)
+			case fyne.KeyX:
+				ctrl.SetKeyDown(controller.B_BUTTON)
+			case fyne.KeySpace:
+				ctrl.SetKeyDown(controller.SELECT)
+			case fyne.KeyReturn:
+				ctrl.SetKeyDown(controller.START)
+			}
+		})
+
+		go func() {
+			for running && !paused {
+				cycles, err := c.Cycle()
 				if err != nil {
 					panic(err)
 				}
+				t.Cycle(cycles)
+				s.Cycle(cycles)
+				cart.UpdateCounter(cycles)
 
-				for i := 0; i < len(vBuffer); i++ {
-					red := byte(vBuffer[i] >> 24)
-					green := byte(vBuffer[i] >> 16 & 0xFF)
-					blue := byte(vBuffer[i] >> 8 & 0xFF)
-
-					pixels[i*4] = 0xFF // alpha
-					pixels[i*4+1] = blue
-					pixels[i*4+2] = green
-					pixels[i*4+3] = red
-				}
-
-				texture.Unlock()
-
-				if err := renderer.Clear(); err != nil {
+				if newBuffer, err := p.Cycle(cycles); err != nil {
 					panic(err)
-				}
-				if err := renderer.Copy(texture, nil, nil); err != nil {
-					panic(err)
-				}
-				renderer.Present()
+				} else if newBuffer != nil {
+					vBuffer = newBuffer
 
-				for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
-					switch t := event.(type) {
-					case *sdl.KeyboardEvent:
-						keyCode := t.Keysym.Sym
-						if keyCode == sdl.K_ESCAPE {
-							running = false
-						} else {
-							ctrl.CheckJoypadEvent(keyCode, t.State)
+					fyne.DoAndWait(func() {
+						raster.Refresh()
+						if ctrl.CheckForInputs() {
+							b.ToggleInterrupt(interrupts.JOYPAD)
 						}
-					case *sdl.QuitEvent:
-						running = false
-					default:
-						break
-					}
-				}
-
-				if ctrl.CheckForInputs() {
-					b.ToggleInterrupt(interrupts.JOYPAD)
+					})
 				}
 			}
-		}
+		}()
+
+		myWindow.ShowAndRun()
 	},
 }
 
 func main() {
-	rootCmd.Flags().Int32Var(&scale, scaleFName, defaultScale, "scale the window size as a multiple of the default gameboy resolution")
+	rootCmd.Flags().Uint32Var(&scale, scaleFName, defaultScale, "scale the window size as a multiple of the default gameboy resolution")
 	rootCmd.Flags().StringVar(&romName, romFName, "", "specify a .gb file")
 	err := rootCmd.Execute()
 	if err != nil {
