@@ -39,12 +39,6 @@ var rootCmd = &cobra.Command{
 			panic("no rom :(") // TODO: splash screen
 		}
 
-		var winWidth, winHeight = float32(gbWidth * scale), float32(gbHeight * scale)
-		vBuffer := make([][]uint32, gbHeight)
-		for i := range vBuffer {
-			vBuffer[i] = make([]uint32, gbWidth)
-		}
-
 		fileData, err := os.ReadFile(fileName)
 		if err != nil {
 			panic(err) // no point in continuing
@@ -52,30 +46,20 @@ var rootCmd = &cobra.Command{
 
 		cart := cartridge.NewCartridge(fileData)
 
+		var winWidth, winHeight = float32(gbWidth * scale), float32(gbHeight * scale)
+
 		myApp := app.New()
 		myWindow := myApp.NewWindow("GOBOY - " + cart.Title)
 
-		raster := canvas.NewRaster(func(w, h int) image.Image {
-			img := image.NewRGBA(image.Rect(0, 0, int(gbWidth), int(gbHeight)))
-			for y, scanLine := range vBuffer {
-				for x, pixel := range scanLine {
-					red := uint8(pixel >> 24)
-					green := uint8(pixel >> 16 & 0xFF)
-					blue := uint8(pixel >> 8 & 0xFF)
+		texture := image.NewRGBA(image.Rect(0, 0, int(gbWidth), int(gbHeight)))
+		texCanvas := canvas.NewImageFromImage(texture)
+		texCanvas.Image = texture
+		texCanvas.ScaleMode = canvas.ImageScalePixels
+		texCanvas.Resize(fyne.NewSize(winWidth, winHeight))
+		texCanvas.SetMinSize(fyne.NewSize(winWidth, winHeight))
 
-					img.Set(x, y, color.RGBA{R: red, G: green, B: blue, A: 0xff})
-				}
-			}
-
-			return img
-		})
-
-		raster.Resize(fyne.NewSize(winWidth, winHeight))
-		raster.SetMinSize(fyne.NewSize(winWidth, winHeight))
-		raster.ScaleMode = canvas.ImageScalePixels
-
-		myWindow.SetContent(raster)
-		myWindow.Resize(raster.Size())
+		myWindow.SetContent(texCanvas)
+		myWindow.Resize(texCanvas.Size())
 		myWindow.CenterOnScreen()
 		myWindow.SetFixedSize(true)
 
@@ -164,17 +148,25 @@ var rootCmd = &cobra.Command{
 				s.Cycle(cycles)
 				cart.UpdateCounter(cycles)
 
-				if newBuffer, err := p.Cycle(cycles); err != nil {
+				if vBuffer, err := p.Cycle(cycles); err != nil {
 					panic(err)
-				} else if newBuffer != nil {
-					vBuffer = newBuffer
-
-					fyne.DoAndWait(func() {
-						raster.Refresh()
-						if ctrl.CheckForInputs() {
-							b.ToggleInterrupt(interrupts.JOYPAD)
+				} else if vBuffer != nil {
+					for y, scanLine := range vBuffer {
+						for x, pixel := range scanLine {
+							red := uint8(pixel >> 24)
+							green := uint8(pixel >> 16 & 0xFF)
+							blue := uint8(pixel >> 8 & 0xFF)
+							texture.Set(x, y, color.RGBA{R: red, G: green, B: blue, A: 0xff})
 						}
+					}
+
+					fyne.Do(func() {
+						texCanvas.Refresh()
 					})
+
+					if ctrl.CheckForInputs() {
+						b.ToggleInterrupt(interrupts.JOYPAD)
+					}
 				}
 			}
 		}()
